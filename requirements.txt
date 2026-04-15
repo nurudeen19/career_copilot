@@ -1,0 +1,1 @@
+# Pin versions when you add integrations (LLM APIs, search, etc.).
