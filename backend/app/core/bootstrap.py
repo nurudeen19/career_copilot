@@ -4,4 +4,5 @@ from app.config.settings import get_settings
 
 
 def init_app() -> None:
+    """Load settings."""
     get_settings()

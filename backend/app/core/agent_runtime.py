@@ -1,0 +1,92 @@
+"""Process-wide chat models and LangChain ``create_agent`` graphs (one place)."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from typing import Any
+
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain.agents import create_agent
+
+from app.config.agents import AgentName
+from app.config.settings import Settings, get_settings
+from app.llm.providers import build_chat_model
+
+
+def _agent_cache_key(name: AgentName, response_format: Any) -> tuple[Any, ...]:
+    """Stable cache key per agent + optional structured-output schema."""
+    if response_format is None:
+        return (name, None)
+    if isinstance(response_format, type):
+        return (name, response_format)
+    return (name, id(response_format))
+
+
+class AgentRuntime:
+    """Caches chat models and compiled agents from ``initialize_agent``."""
+
+    def __init__(self, settings: Settings | None = None) -> None:
+        self._settings = settings or get_settings()
+        self._chat_models: dict[AgentName, BaseChatModel] = {}
+        self._agents: dict[tuple[Any, ...], Any] = {}
+
+    @property
+    def settings(self) -> Settings:
+        return self._settings
+
+    def chat_model(self, name: AgentName) -> BaseChatModel:
+        if name not in self._chat_models:
+            agent_llm_config = getattr(self._settings.agents, name)
+            self._chat_models[name] = build_chat_model(agent_llm_config, self._settings)
+        return self._chat_models[name]
+
+    def initialize_agent(
+        self,
+        name: AgentName,
+        *,
+        instructions: str,
+        tools: Sequence[Any] | None = None,
+        response_format: Any | None = None,
+    ) -> Any:
+        """Return a cached LangChain agent, or build it with ``create_agent``."""
+        key = _agent_cache_key(name, response_format)
+        if key in self._agents:
+            return self._agents[key]
+
+        tool_list = list(tools) if tools else []
+        kwargs: dict[str, Any] = {
+            "tools": tool_list,
+            "system_prompt": instructions,
+        }
+        if response_format is not None:
+            kwargs["response_format"] = response_format
+
+        graph = create_agent(self.chat_model(name), **kwargs)
+        self._agents[key] = graph
+        return graph
+
+    def clear(self) -> None:
+        self._chat_models.clear()
+        self._agents.clear()
+
+
+_runtime: AgentRuntime | None = None
+
+
+def get_agent_runtime(settings: Settings | None = None) -> AgentRuntime:
+    """Process-wide default runtime (recreate if you pass explicit ``settings``)."""
+    global _runtime
+    if settings is not None:
+        return AgentRuntime(settings=settings)
+    if _runtime is None:
+        _runtime = AgentRuntime()
+    return _runtime
+
+
+def reset_agent_runtime() -> None:
+    """Clear the default runtime (tests or config reload)."""
+    global _runtime
+    _runtime = None
+    from app.agents.registry import reset_agent_bundle
+
+    reset_agent_bundle()

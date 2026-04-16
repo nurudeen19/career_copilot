@@ -1,15 +1,19 @@
-from app.agents.planner import run as plan
-from app.agents.research import run as research
-from app.agents.analyst import run as analyze
-from app.agents.critic import run as critique
-from app.agents.synthesizer import run as synthesize
-from app.agents.feedback import run as analyze_feedback
+from app.agents.analyst import AnalystAgent
+from app.agents.critic import CriticAgent
+from app.agents.feedback import FeedbackAgent
+from app.agents.planner import PlannerAgent
+from app.agents.registry import AgentBundle, get_agent_bundle, reset_agent_bundle
+from app.agents.research import ResearchAgent
+from app.agents.synthesizer import SynthesizerAgent
 
 __all__ = [
-    "plan",
-    "research",
-    "analyze",
-    "critique",
-    "synthesize",
-    "analyze_feedback",
+    "AgentBundle",
+    "AnalystAgent",
+    "CriticAgent",
+    "FeedbackAgent",
+    "PlannerAgent",
+    "ResearchAgent",
+    "SynthesizerAgent",
+    "get_agent_bundle",
+    "reset_agent_bundle",
 ]

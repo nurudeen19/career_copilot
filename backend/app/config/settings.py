@@ -1,18 +1,33 @@
-"""Environment-backed settings (no extra deps)."""
+"""Environment-backed settings."""
 
-from dataclasses import dataclass
 from functools import lru_cache
-import os
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.config.agents import AgentsConfig
 
 
-@dataclass(frozen=True)
-class Settings:
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_nested_delimiter="__",
+        extra="ignore",
+        case_sensitive=False,
+    )
+
     app_name: str = "Career Copilot"
     debug: bool = False
+    openai_api_key: str | None = None
+    groq_api_key: str | None = None
+    openrouter_api_key: str | None = None
+    google_api_key: str | None = None
+    tavily_api_key: str | None = None
+
+    agents: AgentsConfig = Field(default_factory=AgentsConfig)
 
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings(
-        debug=os.getenv("DEBUG", "").lower() in ("1", "true", "yes"),
-    )
+    return Settings()

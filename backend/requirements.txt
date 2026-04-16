@@ -1,1 +1,9 @@
 # Pin versions when you add integrations (LLM APIs, search, etc.).
+pydantic>=2.7
+pydantic-settings>=2.2
+langchain-core>=1.2.10,<2.0.0
+langchain>=1.0.0
+langgraph>=1.1.5,<1.2.0
+langchain-openai>=0.2.0
+langchain-groq>=0.2.0
+langchain-google-genai>=2.0.0
