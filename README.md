@@ -1,29 +1,28 @@
 # Career Copilot
 
-Chat-based agentic career advisor: career switches, skill gaps, offer evaluation, and path planning.
+Python agent backend and Vue frontend for a chat-based career advisor (switches, skill gaps, offers, planning).
 
 ## Layout
 
-- `app/core/` — startup (`init_app`).
-- `app/config/` — settings (`get_settings`).
-- `app/agents/` — planner, research, analyst, critic, synthesizer, feedback (stubs for LLM wiring).
-- `app/tools/` — research tool hooks (stubs).
-- `app/pipeline.py` — default agent order for one user turn.
+- `backend/app/` — FastAPI-style layout: `core/`, `config/`, `agents/`, `tools/`, `pipeline.py`, `schema/` (shared schemas).
+- `frontend/` — Vue 3 SPA (TypeScript, Vue Router, Pinia).
 
-## Setup
+## Backend
 
-```bash
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
 ```
-
-## Try the stub pipeline
-
-```bash
+cd backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
 python -m app.main
 ```
 
-## Environment
+Copy `backend/.env.example` to `backend/.env` when you wire APIs.
 
-Copy `.env.example` to `.env` when you wire APIs.
+## Frontend
+
+```
+cd frontend
+npm install
+npm run dev
+```
