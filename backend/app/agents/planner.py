@@ -4,6 +4,7 @@ from typing import Any, ClassVar
 
 from app.config.agents import AgentName
 from app.core.agent_runtime import AgentRuntime
+from app.tools.search_tools import SEARCH_TOOLS
 
 
 class PlannerAgent:
@@ -13,7 +14,7 @@ class PlannerAgent:
         "extract structured information: current role or state, target role or direction, "
         "and constraints (time, budget, location). Output clear subtasks when helpful."
     )
-    TOOLS: ClassVar[tuple[Any, ...]] = ()
+    TOOLS: ClassVar[tuple[Any, ...]] = SEARCH_TOOLS
     # Optional: set to a Pydantic model type, ToolStrategy, ProviderStrategy, etc. (see LangChain create_agent docs).
     RESPONSE_FORMAT: ClassVar[Any | None] = None
 

@@ -25,6 +25,8 @@ dependencies = [
     "langchain-openai>=0.2.0",
     "langchain-groq>=0.2.0",
     "langchain-google-genai>=2.0.0",
+    "httpx>=0.27",
+    "langchain-tavily>=0.2.18",
 ]
 
 [tool.setuptools.packages.find]

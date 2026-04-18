@@ -13,13 +13,18 @@ from app.config.settings import Settings, get_settings
 from app.llm.providers import build_chat_model
 
 
-def _agent_cache_key(name: AgentName, response_format: Any) -> tuple[Any, ...]:
-    """Stable cache key per agent + optional structured-output schema."""
+def _agent_cache_key(
+    name: AgentName,
+    response_format: Any,
+    tools: Sequence[Any] | None,
+) -> tuple[Any, ...]:
+    """Stable cache key per agent, tools, and optional structured-output schema."""
+    tool_names = tuple(getattr(t, "name", type(t).__name__) for t in (tools or ()))
     if response_format is None:
-        return (name, None)
+        return (name, None, tool_names)
     if isinstance(response_format, type):
-        return (name, response_format)
-    return (name, id(response_format))
+        return (name, response_format, tool_names)
+    return (name, id(response_format), tool_names)
 
 
 class AgentRuntime:
@@ -49,7 +54,7 @@ class AgentRuntime:
         response_format: Any | None = None,
     ) -> Any:
         """Return a cached LangChain agent, or build it with ``create_agent``."""
-        key = _agent_cache_key(name, response_format)
+        key = _agent_cache_key(name, response_format, tools)
         if key in self._agents:
             return self._agents[key]
 

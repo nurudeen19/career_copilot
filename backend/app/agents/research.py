@@ -5,6 +5,7 @@ from typing import Any, ClassVar
 from app.config.agents import AgentName
 from app.core.agent_runtime import AgentRuntime
 from app.tools import research_tools
+from app.tools.search_tools import SEARCH_TOOLS
 
 
 class ResearchAgent:
@@ -14,7 +15,7 @@ class ResearchAgent:
         "required skills, salary benchmarks, and demand signals for the user's target path. "
         "Cite or summarize sources when tools return them."
     )
-    TOOLS: ClassVar[tuple[Any, ...]] = ()
+    TOOLS: ClassVar[tuple[Any, ...]] = SEARCH_TOOLS
     RESPONSE_FORMAT: ClassVar[Any | None] = None
 
     def __init__(self, runtime: AgentRuntime) -> None:

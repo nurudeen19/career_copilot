@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str | None = None
     google_api_key: str | None = None
     tavily_api_key: str | None = None
+    brave_search_api_key: str | None = None
 
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
 
