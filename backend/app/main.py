@@ -5,9 +5,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+import logging
+
 from app.api.api import api_router
 from app.config.settings import get_settings
 from app.core.bootstrap import init_app, shutdown_app, verify_database_connection
+from app.core.logging_config import configure_logging
+from app.core.request_logging import RequestLoggingMiddleware
+
+_lifecycle_log = logging.getLogger("app.lifecycle")
 
 
 def _cors_allow_origins(raw: str) -> list[str]:
@@ -22,15 +28,30 @@ async def lifespan(_app: FastAPI):
     settings = get_settings()
     if not settings.database_url:
         msg = "DATABASE_URL is required to run the HTTP API."
+        _lifecycle_log.error(msg)
         raise RuntimeError(msg)
-    init_app()
-    verify_database_connection()
+    _lifecycle_log.info("Startup: initializing application (database, guardrails, tracing)")
+    try:
+        init_app()
+        verify_database_connection()
+    except Exception:
+        _lifecycle_log.exception("Startup failed during init_app or database verification")
+        raise
+    _lifecycle_log.info("Startup: application ready")
     yield
-    shutdown_app()
+    _lifecycle_log.info("Shutdown: releasing resources")
+    try:
+        shutdown_app()
+    except Exception:
+        _lifecycle_log.exception("Shutdown raised an error")
+        raise
+    _lifecycle_log.info("Shutdown: complete")
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    configure_logging(settings)
+    _lifecycle_log.info("Creating FastAPI app=%r debug=%s", settings.app_name, settings.debug)
     application = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=lifespan)
     origins = _cors_allow_origins(settings.cors_allow_origins)
     if origins:
@@ -41,6 +62,7 @@ def create_app() -> FastAPI:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+    application.add_middleware(RequestLoggingMiddleware)
     application.include_router(api_router)
     return application
 

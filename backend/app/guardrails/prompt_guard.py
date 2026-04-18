@@ -12,6 +12,11 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 _pipeline: Any | None = None
 
 
+def is_prompt_guard_loaded() -> bool:
+    """True after ``setup_prompt_guard`` has completed successfully."""
+    return _pipeline is not None
+
+
 def _hf_token(settings: Settings) -> str | None:
     return (
         settings.huggingface_token

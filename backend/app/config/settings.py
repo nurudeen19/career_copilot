@@ -19,6 +19,10 @@ class Settings(BaseSettings):
 
     app_name: str = "Career Copilot"
     debug: bool = False
+    log_level: str = Field(
+        default="INFO",
+        description="Root log level: DEBUG, INFO, WARNING, ERROR (also applied to uvicorn loggers).",
+    )
     cors_allow_origins: str = Field(
         default="http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173",
         description="Comma-separated origins for browser clients; use * to allow any (no credentials).",

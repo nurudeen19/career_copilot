@@ -42,6 +42,21 @@ def ping() -> None:
         conn.execute(text("SELECT 1"))
 
 
+def database_health() -> tuple[str, str | None]:
+    """
+    Non-throwing DB probe for ``/health``.
+
+    Returns ``("ok", None)``, ``("not_configured", None)``, or ``("error", message)``.
+    """
+    if _engine is None:
+        return "not_configured", None
+    try:
+        ping()
+    except Exception as exc:  # noqa: BLE001
+        return "error", str(exc)[:500]
+    return "ok", None
+
+
 def open_tool_session() -> Session:
     """Return a new ORM session for LangChain tools. Caller must ``close()``."""
     if _SessionLocal is None:
