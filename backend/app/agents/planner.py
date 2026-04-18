@@ -21,7 +21,7 @@ class PlannerAgent:
         "Do not rely on downstream defaults — assistant_message for non-research handoffs must read as a complete assistant turn. "
         "Always fill current_state, target_role, constraints, subtasks, notes when handoff=research; for other handoffs "
         "those may be partial but still honest. "
-        "When a user UUID is present, call get_user_profile_by_id first to align with saved profile fields. "
+        "When the user is authenticated in session, call get_my_saved_profile (no arguments) to align with saved profile fields. "
         "Use web search only to disambiguate vague job titles. "
         "Your final structured output MUST include handoff; assistant_message is required for user_clarify and user_casual_redirect."
     )

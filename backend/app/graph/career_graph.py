@@ -23,6 +23,7 @@ from app.core.agent_runtime import AgentRuntime, get_agent_runtime
 from app.core.retry_policy import WORKFLOW_RETRY
 from app.graph.checkpoint import dispose_checkpointer, get_checkpointer
 from app.guardrails import run_user_input_guardrails
+from app.tools.runtime_context import workflow_user_id as workflow_user_id_var
 from app.schema.agent_outputs import (
     AnalystAgentOutput,
     CriticAgentOutput,
@@ -58,11 +59,29 @@ def _user_id_prefix(state: CareerGraphState) -> list[AnyMessage]:
     uid = (state.get("user_id") or "").strip()
     if not uid:
         return []
-    return [SystemMessage(content=f"User profile UUID for tools: {uid}")]
+    return [
+        SystemMessage(
+            content=(
+                "Authenticated user id for this session (for your context only; "
+                "to load their saved profile use the tool get_my_saved_profile with no arguments)."
+            )
+        )
+    ]
 
 
-def _invoke_agent_graph(agent_graph: Any, messages: list[AnyMessage]) -> dict[str, Any]:
-    return agent_graph.invoke({"messages": messages})
+def _invoke_agent_graph(
+    agent_graph: Any,
+    messages: list[AnyMessage],
+    *,
+    workflow_user_id: str | None,
+) -> dict[str, Any]:
+    """Run an agent subgraph with ``workflow_user_id`` bound for profile tools (no model-supplied UUID)."""
+    raw = (workflow_user_id or "").strip() or None
+    token = workflow_user_id_var.set(raw)
+    try:
+        return agent_graph.invoke({"messages": messages})
+    finally:
+        workflow_user_id_var.reset(token)
 
 
 def _structured(result: dict[str, Any], model_cls: type[Any]) -> Any | None:
@@ -106,7 +125,12 @@ def _make_input_validation_node(runtime: AgentRuntime):
 def _make_planner_node(runtime: AgentRuntime):
     def planner_node(state: CareerGraphState) -> dict[str, Any]:
         msgs = list(state.get("messages") or [])
-        out = _invoke_agent_graph(PlannerAgent(runtime).graph, _user_id_prefix(state) + msgs)
+        uid = (state.get("user_id") or "").strip() or None
+        out = _invoke_agent_graph(
+            PlannerAgent(runtime).graph,
+            _user_id_prefix(state) + msgs,
+            workflow_user_id=uid,
+        )
         parsed = _structured(out, PlannerAgentOutput)
         if parsed is None:
             parsed = PlannerAgentOutput(
@@ -127,7 +151,12 @@ def _make_research_node(runtime: AgentRuntime):
                 content="Planner output (JSON):\n" + json.dumps(state.get("plan", {}), default=str, indent=2)
             )
         ]
-        out = _invoke_agent_graph(ResearchAgent(runtime).graph, _user_id_prefix(state) + msgs + ctx)
+        uid = (state.get("user_id") or "").strip() or None
+        out = _invoke_agent_graph(
+            ResearchAgent(runtime).graph,
+            _user_id_prefix(state) + msgs + ctx,
+            workflow_user_id=uid,
+        )
         parsed = _structured(out, ResearchAgentOutput)
         return {"research": parsed.model_dump() if parsed else {}}
 
@@ -145,7 +174,12 @@ def _make_analyst_node(runtime: AgentRuntime):
                 + json.dumps(state.get("research", {}), default=str)
             )
         ]
-        out = _invoke_agent_graph(AnalystAgent(runtime).graph, _user_id_prefix(state) + msgs + ctx)
+        uid = (state.get("user_id") or "").strip() or None
+        out = _invoke_agent_graph(
+            AnalystAgent(runtime).graph,
+            _user_id_prefix(state) + msgs + ctx,
+            workflow_user_id=uid,
+        )
         parsed = _structured(out, AnalystAgentOutput)
         return {"analysis": parsed.model_dump() if parsed else {}}
 
@@ -165,7 +199,12 @@ def _make_critic_node(runtime: AgentRuntime):
                 + json.dumps(state.get("analysis", {}), default=str)
             )
         ]
-        out = _invoke_agent_graph(CriticAgent(runtime).graph, _user_id_prefix(state) + msgs + ctx)
+        uid = (state.get("user_id") or "").strip() or None
+        out = _invoke_agent_graph(
+            CriticAgent(runtime).graph,
+            _user_id_prefix(state) + msgs + ctx,
+            workflow_user_id=uid,
+        )
         parsed = _structured(out, CriticAgentOutput)
         return {"critique": parsed.model_dump() if parsed else {}}
 
@@ -190,7 +229,12 @@ def _make_synthesizer_node(runtime: AgentRuntime):
                 )[:24000]
             )
         ]
-        out = _invoke_agent_graph(SynthesizerAgent(runtime).graph, _user_id_prefix(state) + msgs + ctx)
+        uid = (state.get("user_id") or "").strip() or None
+        out = _invoke_agent_graph(
+            SynthesizerAgent(runtime).graph,
+            _user_id_prefix(state) + msgs + ctx,
+            workflow_user_id=uid,
+        )
         parsed = _structured(out, SynthesizerAgentOutput)
         if parsed is None:
             return {"synthesis": {}, "messages": [AIMessage(content="I could not produce a final synthesis.")]}
@@ -210,7 +254,12 @@ def _make_feedback_node(runtime: AgentRuntime):
         msgs = list(state.get("messages") or [])
         fb_raw = (state.get("user_feedback") or "").strip()
         ctx = [SystemMessage(content=f"User dissatisfaction or correction:\n{fb_raw}")]
-        out = _invoke_agent_graph(FeedbackAgent(runtime).graph, _user_id_prefix(state) + msgs + ctx)
+        uid = (state.get("user_id") or "").strip() or None
+        out = _invoke_agent_graph(
+            FeedbackAgent(runtime).graph,
+            _user_id_prefix(state) + msgs + ctx,
+            workflow_user_id=uid,
+        )
         parsed = _structured(out, FeedbackAgentOutput)
         hints = parsed.adaptation_hints if isinstance(parsed, FeedbackAgentOutput) else []
         notes = parsed.notes if isinstance(parsed, FeedbackAgentOutput) else ""

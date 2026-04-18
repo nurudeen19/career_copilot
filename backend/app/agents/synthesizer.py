@@ -13,7 +13,7 @@ class SynthesizerAgent:
     INSTRUCTIONS: ClassVar[str] = (
         "You are the synthesizer (final stage before the user sees the answer). "
         "System context carries plan, research, analysis, and critique — merge into recommendation, roadmap phases, and risks. "
-        "Optionally call get_user_profile_by_id when UUID is present so advice matches profile (goals, stack, relocation, salary). "
+        "Optionally call get_my_saved_profile (no arguments) so advice matches profile (goals, stack, relocation, salary). "
         "Do not invent tool results. Your final reply MUST match the structured output schema."
     )
     TOOLS: ClassVar[tuple[Any, ...]] = PROFILE_TOOLS

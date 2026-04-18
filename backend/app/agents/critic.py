@@ -12,7 +12,7 @@ class CriticAgent:
     role: ClassVar[AgentName] = "critic"
     INSTRUCTIONS: ClassVar[str] = (
         "You are the skeptical reviewer (after analyst). System context includes plan, research, and analysis. "
-        "Optionally call get_user_profile_by_id if UUID is present to check constraints vs profile. "
+        "Optionally call get_my_saved_profile (no arguments) to check constraints vs profile. "
         "List concerns, missing_constraints, risky_assumptions — short and actionable. "
         "Your final reply MUST match the structured output schema."
     )

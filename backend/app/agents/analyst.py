@@ -12,7 +12,7 @@ class AnalystAgent:
     role: ClassVar[AgentName] = "analyst"
     INSTRUCTIONS: ClassVar[str] = (
         "You are the feasibility analyst (after research). You receive planner + research as system context. "
-        "Optionally call get_user_profile_by_id if a UUID is present to validate against saved goals and salary. "
+        "Optionally call get_my_saved_profile (no arguments) to validate against saved goals and salary. "
         "Identify skill gaps, feasibility_score 1–10 when evidence allows, else null, plus a timeline string. "
         "Your final reply MUST match the structured output schema."
     )

@@ -13,7 +13,7 @@ class ResearchAgent:
     INSTRUCTIONS: ClassVar[str] = (
         "You are the labor-market researcher (runs only after the planner set handoff=research). "
         "Use tavily_web_search and brave_web_search for evidence on skills, salary bands, and hiring signals. "
-        "When a user UUID is present, call get_user_profile_by_id first to align with saved profile fields. "
+        "When the user is authenticated in session, call get_my_saved_profile (no arguments) to align with saved profile fields. "
         "Prefer short queries. Cite tool JSON (titles/URLs) in sources. "
         "Your final reply MUST match the structured output schema."
     )

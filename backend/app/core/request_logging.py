@@ -10,6 +10,8 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
+from app.core.request_identity import jwt_sub_for_logs
+
 logger = logging.getLogger("app.http")
 
 
@@ -21,20 +23,56 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         start = time.perf_counter()
         path = request.url.path
         method = request.method
+        user_id = jwt_sub_for_logs(request)
+        uid_log = user_id or "-"
         try:
             response = await call_next(request)
         except Exception:
             duration_ms = (time.perf_counter() - start) * 1000
-            logger.exception("%s %s failed after %.1f ms", method, path, duration_ms)
+            logger.exception(
+                "%s %s user_id=%s failed after %.1f ms",
+                method,
+                path,
+                uid_log,
+                duration_ms,
+            )
             raise
         duration_ms = (time.perf_counter() - start) * 1000
         status = response.status_code
         if path == "/health":
-            logger.debug("%s %s -> %s in %.1f ms", method, path, status, duration_ms)
+            logger.debug(
+                "%s %s user_id=%s -> %s in %.1f ms",
+                method,
+                path,
+                uid_log,
+                status,
+                duration_ms,
+            )
         elif status >= 500:
-            logger.error("%s %s -> %s in %.1f ms", method, path, status, duration_ms)
+            logger.error(
+                "%s %s user_id=%s -> %s in %.1f ms",
+                method,
+                path,
+                uid_log,
+                status,
+                duration_ms,
+            )
         elif status >= 400:
-            logger.warning("%s %s -> %s in %.1f ms", method, path, status, duration_ms)
+            logger.warning(
+                "%s %s user_id=%s -> %s in %.1f ms",
+                method,
+                path,
+                uid_log,
+                status,
+                duration_ms,
+            )
         else:
-            logger.info("%s %s -> %s in %.1f ms", method, path, status, duration_ms)
+            logger.info(
+                "%s %s user_id=%s -> %s in %.1f ms",
+                method,
+                path,
+                uid_log,
+                status,
+                duration_ms,
+            )
         return response

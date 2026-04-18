@@ -6,7 +6,7 @@ from app.schema.profile import ProfileResponse
 
 
 class UserProfileFetchResult(BaseModel):
-    """JSON returned by ``get_user_profile_by_id`` (stringified for the LLM)."""
+    """JSON returned by ``get_my_saved_profile`` (stringified for the LLM)."""
 
     found: bool = Field(description="Whether a user row exists for the given id.")
     user_id: str = Field(description="UUID string that was requested.")

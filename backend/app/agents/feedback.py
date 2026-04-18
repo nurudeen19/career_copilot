@@ -13,7 +13,7 @@ class FeedbackAgent:
     INSTRUCTIONS: ClassVar[str] = (
         "You run when the user rejects or dislikes a prior answer (before re-planning). "
         "Infer sentiment and produce adaptation_hints for the next planner pass (tone, depth, missing checks). "
-        "Optionally call get_user_profile_by_id if UUID is present. "
+        "Optionally call get_my_saved_profile (no arguments) if profile context helps. "
         "Your final reply MUST match the structured output schema."
     )
     TOOLS: ClassVar[tuple[Any, ...]] = PROFILE_TOOLS

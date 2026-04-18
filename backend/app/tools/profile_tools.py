@@ -1,4 +1,4 @@
-"""LangChain tools that read persisted user context."""
+"""LangChain tools that read persisted user context (bound to the workflow user)."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from app.models.user import User
 from app.models.user_profile import UserProfile
 from app.schema.profile import ProfileResponse
 from app.schema.profile_tool import UserProfileFetchResult
+from app.tools.runtime_context import workflow_user_id
 
 
 def _fetch(session: Session, user_id: uuid.UUID) -> UserProfileFetchResult:
@@ -31,22 +32,25 @@ def _fetch(session: Session, user_id: uuid.UUID) -> UserProfileFetchResult:
 
 
 @tool
-def get_user_profile_by_id(user_id: str) -> str:
-    """Load the user's account name, email, and saved career profile from the database. Argument: user UUID string."""
-    uid = (user_id or "").strip()
-    if not uid:
+def get_my_saved_profile() -> str:
+    """
+    Load the authenticated user's saved career profile from the database.
+    Takes no arguments — the server binds this call to the current workflow user.
+    """
+    raw = (workflow_user_id.get() or "").strip()
+    if not raw:
         return UserProfileFetchResult(
             found=False,
             user_id="",
-            error="user_id is empty; pass a UUID string.",
+            error="No workflow user context; profile cannot be loaded.",
         ).to_json()
     try:
-        parsed = uuid.UUID(uid)
+        parsed = uuid.UUID(raw)
     except ValueError:
         return UserProfileFetchResult(
             found=False,
-            user_id=uid,
-            error="Invalid UUID format.",
+            user_id=raw,
+            error="Invalid workflow user id.",
         ).to_json()
 
     try:
