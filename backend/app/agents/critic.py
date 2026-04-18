@@ -4,16 +4,20 @@ from typing import Any, ClassVar
 
 from app.config.agents import AgentName
 from app.core.agent_runtime import AgentRuntime
+from app.schema.agent_outputs import CriticAgentOutput
+from app.tools import PROFILE_TOOLS
 
 
 class CriticAgent:
     role: ClassVar[AgentName] = "critic"
     INSTRUCTIONS: ClassVar[str] = (
-        "You are a skeptical reviewer of career plans. Challenge optimistic timelines, "
-        "surface missing constraints, and flag risky assumptions. Prefer concise, actionable concerns."
+        "You are the skeptical reviewer (after analyst). System context includes plan, research, and analysis. "
+        "Optionally call get_user_profile_by_id if UUID is present to check constraints vs profile. "
+        "List concerns, missing_constraints, risky_assumptions — short and actionable. "
+        "Your final reply MUST match the structured output schema."
     )
-    TOOLS: ClassVar[tuple[Any, ...]] = ()
-    RESPONSE_FORMAT: ClassVar[Any | None] = None
+    TOOLS: ClassVar[tuple[Any, ...]] = PROFILE_TOOLS
+    RESPONSE_FORMAT: ClassVar[Any | None] = CriticAgentOutput
 
     def __init__(self, runtime: AgentRuntime) -> None:
         self._runtime = runtime

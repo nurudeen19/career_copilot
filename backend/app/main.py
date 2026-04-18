@@ -31,3 +31,14 @@ def create_app() -> FastAPI:
 app = create_app()
 
 
+def main() -> None:
+    """CLI: run one career workflow turn (requires LLM and search keys as configured)."""
+    from app.pipeline import run_turn
+
+    out = run_turn("I'm a backend dev — should I move into AI?")
+    for key in ("plan", "research", "analysis", "critique", "synthesis"):
+        print(f"\n=== {key} ===\n{out.get(key)}")
+
+
+if __name__ == "__main__":
+    main()

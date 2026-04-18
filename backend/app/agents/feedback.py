@@ -4,16 +4,20 @@ from typing import Any, ClassVar
 
 from app.config.agents import AgentName
 from app.core.agent_runtime import AgentRuntime
+from app.schema.agent_outputs import FeedbackAgentOutput
+from app.tools import PROFILE_TOOLS
 
 
 class FeedbackAgent:
     role: ClassVar[AgentName] = "feedback"
     INSTRUCTIONS: ClassVar[str] = (
-        "You interpret user dissatisfaction and follow-up corrections. "
-        "Produce adaptation hints the system can use to adjust tone, depth, or focus on the next turn."
+        "You run when the user rejects or dislikes a prior answer (before re-planning). "
+        "Infer sentiment and produce adaptation_hints for the next planner pass (tone, depth, missing checks). "
+        "Optionally call get_user_profile_by_id if UUID is present. "
+        "Your final reply MUST match the structured output schema."
     )
-    TOOLS: ClassVar[tuple[Any, ...]] = ()
-    RESPONSE_FORMAT: ClassVar[Any | None] = None
+    TOOLS: ClassVar[tuple[Any, ...]] = PROFILE_TOOLS
+    RESPONSE_FORMAT: ClassVar[Any | None] = FeedbackAgentOutput
 
     def __init__(self, runtime: AgentRuntime) -> None:
         self._runtime = runtime

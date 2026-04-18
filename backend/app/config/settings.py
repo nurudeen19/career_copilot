@@ -35,6 +35,14 @@ class Settings(BaseSettings):
     tavily_api_key: str | None = None
     brave_search_api_key: str | None = None
 
+    # LangSmith / LangChain tracing (optional)
+    langchain_tracing_v2: bool = Field(default=False, description="Set LANGCHAIN_TRACING_V2 for LangSmith runs.")
+    langchain_api_key: str | None = Field(
+        default=None,
+        description="LangSmith API key (also sets LANGCHAIN_API_KEY when tracing is on).",
+    )
+    langchain_project: str | None = Field(default="career-copilot", description="LANGCHAIN_PROJECT for traces.")
+
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
 
 

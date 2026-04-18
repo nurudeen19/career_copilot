@@ -1,16 +1,32 @@
 """Shared request/response and domain schemas (e.g. Pydantic models, JSON Schema exports)."""
 
+from app.schema.agent_outputs import (
+    AnalystAgentOutput,
+    CriticAgentOutput,
+    FeedbackAgentOutput,
+    PlannerAgentOutput,
+    ResearchAgentOutput,
+    SynthesizerAgentOutput,
+)
 from app.schema.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
 from app.schema.profile import ProfileResponse, ProfileUpdate
+from app.schema.profile_tool import UserProfileFetchResult
 from app.schema.search import SearchHit, SearchToolResponse
 
 __all__ = [
+    "AnalystAgentOutput",
+    "CriticAgentOutput",
+    "FeedbackAgentOutput",
     "LoginRequest",
+    "PlannerAgentOutput",
     "ProfileResponse",
     "ProfileUpdate",
     "RegisterRequest",
+    "ResearchAgentOutput",
     "SearchHit",
     "SearchToolResponse",
+    "SynthesizerAgentOutput",
     "TokenResponse",
+    "UserProfileFetchResult",
     "UserResponse",
 ]

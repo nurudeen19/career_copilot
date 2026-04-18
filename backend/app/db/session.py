@@ -42,6 +42,14 @@ def ping() -> None:
         conn.execute(text("SELECT 1"))
 
 
+def open_tool_session() -> Session:
+    """Return a new ORM session for LangChain tools. Caller must ``close()``."""
+    if _SessionLocal is None:
+        msg = "Database is not configured. Set DATABASE_URL in the environment."
+        raise RuntimeError(msg)
+    return _SessionLocal()
+
+
 def get_db() -> Generator[Session, Any, None]:
     if _SessionLocal is None:
         msg = "Database is not configured. Set DATABASE_URL in the environment."

@@ -4,19 +4,21 @@ from typing import Any, ClassVar
 
 from app.config.agents import AgentName
 from app.core.agent_runtime import AgentRuntime
-from app.tools import research_tools
-from app.tools.search_tools import SEARCH_TOOLS
+from app.schema.agent_outputs import ResearchAgentOutput
+from app.tools import SEARCH_AND_PROFILE_TOOLS, research_tools
 
 
 class ResearchAgent:
     role: ClassVar[AgentName] = "research"
     INSTRUCTIONS: ClassVar[str] = (
-        "You are a labor-market and skills researcher. Use available tools to gather "
-        "required skills, salary benchmarks, and demand signals for the user's target path. "
-        "Cite or summarize sources when tools return them."
+        "You are the labor-market researcher (runs only after the planner set handoff=research). "
+        "Use tavily_web_search and brave_web_search for evidence on skills, salary bands, and hiring signals. "
+        "When a user UUID is present, call get_user_profile_by_id first to align with saved profile fields. "
+        "Prefer short queries. Cite tool JSON (titles/URLs) in sources. "
+        "Your final reply MUST match the structured output schema."
     )
-    TOOLS: ClassVar[tuple[Any, ...]] = SEARCH_TOOLS
-    RESPONSE_FORMAT: ClassVar[Any | None] = None
+    TOOLS: ClassVar[tuple[Any, ...]] = SEARCH_AND_PROFILE_TOOLS
+    RESPONSE_FORMAT: ClassVar[Any | None] = ResearchAgentOutput
 
     def __init__(self, runtime: AgentRuntime) -> None:
         self._runtime = runtime

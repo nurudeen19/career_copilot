@@ -4,17 +4,20 @@ from typing import Any, ClassVar
 
 from app.config.agents import AgentName
 from app.core.agent_runtime import AgentRuntime
+from app.schema.agent_outputs import AnalystAgentOutput
+from app.tools import PROFILE_TOOLS
 
 
 class AnalystAgent:
     role: ClassVar[AgentName] = "analyst"
     INSTRUCTIONS: ClassVar[str] = (
-        "You are a career feasibility analyst. From the plan and research artifacts, "
-        "identify skill gaps, estimate feasibility, and propose a realistic timeline. "
-        "Be direct about tradeoffs and missing information."
+        "You are the feasibility analyst (after research). You receive planner + research as system context. "
+        "Optionally call get_user_profile_by_id if a UUID is present to validate against saved goals and salary. "
+        "Identify skill gaps, feasibility_score 1–10 when evidence allows, else null, plus a timeline string. "
+        "Your final reply MUST match the structured output schema."
     )
-    TOOLS: ClassVar[tuple[Any, ...]] = ()
-    RESPONSE_FORMAT: ClassVar[Any | None] = None
+    TOOLS: ClassVar[tuple[Any, ...]] = PROFILE_TOOLS
+    RESPONSE_FORMAT: ClassVar[Any | None] = AnalystAgentOutput
 
     def __init__(self, runtime: AgentRuntime) -> None:
         self._runtime = runtime
