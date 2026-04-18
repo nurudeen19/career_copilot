@@ -19,6 +19,15 @@ class Settings(BaseSettings):
 
     app_name: str = "Career Copilot"
     debug: bool = False
+
+    database_url: str | None = Field(
+        default=None,
+        description="SQLAlchemy URL, e.g. postgresql+psycopg://user:pass@localhost:5432/career_copilot",
+    )
+    jwt_secret: str = Field(default="change-me", min_length=8)
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 60 * 24 * 7
+
     openai_api_key: str | None = None
     groq_api_key: str | None = None
     openrouter_api_key: str | None = None
