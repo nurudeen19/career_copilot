@@ -1,35 +1,136 @@
 @import './base.css';
 
+:root {
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+
+  --color-canvas: #faf7f2;
+  --color-canvas-2: #f3eee6;
+  --color-surface: #ffffff;
+  --color-ink: #1a1714;
+  --color-ink-muted: #5c5650;
+  --color-ink-faint: #8a847c;
+  --color-accent: #3d6b5c;
+  --color-accent-hover: #325648;
+  --color-warm: #c67d4e;
+  --color-border: rgba(26, 23, 20, 0.1);
+  --color-border-strong: rgba(26, 23, 20, 0.16);
+  --shadow-soft: 0 4px 24px rgba(26, 23, 20, 0.06);
+  --shadow-lift: 0 12px 40px rgba(26, 23, 20, 0.08);
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --radius-full: 9999px;
+  --max-readable: 38rem;
+  --max-content: 1120px;
+}
+
 #app {
-  max-width: 1280px;
+  min-height: 100vh;
+}
+
+/* Utilities */
+.cc-container {
+  width: 100%;
+  max-width: var(--max-content);
   margin: 0 auto;
-  padding: 2rem;
-  font-weight: normal;
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
 }
 
-a,
-.green {
+.cc-display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.cc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.25rem;
+  border-radius: var(--radius-full);
+  border: none;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    transform 0.15s ease,
+    box-shadow 0.2s ease;
+}
+
+.cc-btn:active {
+  transform: scale(0.98);
+}
+
+.cc-btn--primary {
+  background: var(--color-accent);
+  color: #fff;
+  box-shadow: 0 2px 12px rgba(61, 107, 92, 0.35);
+}
+
+.cc-btn--primary:hover {
+  background: var(--color-accent-hover);
+}
+
+.cc-btn--ghost {
+  background: transparent;
+  color: var(--color-ink);
+  border: 1px solid var(--color-border-strong);
+}
+
+.cc-btn--ghost:hover {
+  background: var(--color-canvas-2);
+}
+
+.cc-link {
+  color: var(--color-accent);
+  font-weight: 600;
   text-decoration: none;
-  color: hsla(160, 100%, 37%, 1);
-  transition: 0.4s;
-  padding: 3px;
 }
 
-@media (hover: hover) {
-  a:hover {
-    background-color: hsla(160, 100%, 37%, 0.2);
-  }
+.cc-link:hover {
+  text-decoration: underline;
 }
 
-@media (min-width: 1024px) {
-  body {
-    display: flex;
-    place-items: center;
-  }
+.cc-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
 
-  #app {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    padding: 0 2rem;
-  }
+.cc-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(61, 107, 92, 0.15);
+}
+
+.cc-label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  margin-bottom: 0.35rem;
+}
+
+.cc-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+  border: 1px solid var(--color-border);
+}
+
+.cc-muted {
+  color: var(--color-ink-muted);
+  font-size: 0.9375rem;
 }

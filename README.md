@@ -26,3 +26,5 @@ cd frontend
 npm install
 npm run dev
 ```
+
+Vite proxies `/api/*` to `http://127.0.0.1:8000` in dev (see `frontend/vite.config.ts`). Run the backend on port **8000** or set `VITE_API_BASE_URL` in `frontend/.env` to your API origin. Ensure backend `CORS_ALLOW_ORIGINS` includes your Vite URL (e.g. `http://localhost:5173`) if you use a full URL instead of the proxy.
