@@ -12,6 +12,7 @@ from app.schema.auth import LoginRequest, RegisterRequest, TokenResponse, UserRe
 from app.schema.profile import ProfileResponse, ProfileUpdate
 from app.schema.profile_tool import UserProfileFetchResult
 from app.schema.search import SearchHit, SearchToolResponse
+from app.schema.workflow import WorkflowStreamRequest
 
 __all__ = [
     "AnalystAgentOutput",
@@ -29,4 +30,5 @@ __all__ = [
     "TokenResponse",
     "UserProfileFetchResult",
     "UserResponse",
+    "WorkflowStreamRequest",
 ]

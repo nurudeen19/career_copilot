@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from typing import Annotated, Any, Literal
+
+from tenacity import retry
 
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
@@ -17,6 +20,7 @@ from app.agents.planner import PlannerAgent
 from app.agents.research import ResearchAgent
 from app.agents.synthesizer import SynthesizerAgent
 from app.core.agent_runtime import AgentRuntime, get_agent_runtime
+from app.core.retry_policy import WORKFLOW_RETRY
 from app.graph.checkpoint import dispose_checkpointer, get_checkpointer
 from app.guardrails import run_user_input_guardrails
 from app.schema.agent_outputs import (
@@ -272,6 +276,24 @@ def build_graph(runtime: AgentRuntime | None = None) -> Any:
     return _compiled
 
 
+def stream_graph_updates(
+    initial: dict[str, Any],
+    *,
+    thread_id: str,
+    runtime: AgentRuntime | None = None,
+) -> Iterator[dict[str, Any]]:
+    """Yield per-node state updates (``stream_mode=\"updates\"``) for SSE / NDJSON clients."""
+    graph = build_graph(runtime or get_agent_runtime())
+    cfg: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
+    yield from graph.stream(initial, config=cfg, stream_mode="updates")
+
+
+@retry(**WORKFLOW_RETRY)
+def invoke_career_graph(graph: Any, initial: dict[str, Any], cfg: dict[str, Any]) -> dict[str, Any]:
+    """Single graph ``invoke`` with Tenacity retries on transient provider / HTTP errors."""
+    return graph.invoke(initial, config=cfg)
+
+
 def run_graph(
     user_message: str,
     *,
@@ -288,7 +310,7 @@ def run_graph(
     if user_feedback:
         initial["user_feedback"] = user_feedback
     cfg: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
-    final_state = graph.invoke(initial, config=cfg)
+    final_state = invoke_career_graph(graph, initial, cfg)
     return {
         "thread_id": thread_id,
         "user_message": user_message,
@@ -315,7 +337,7 @@ def run_graph_continue(
     if user_id:
         update["user_id"] = user_id
     cfg: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
-    final_state = graph.invoke(update, config=cfg)
+    final_state = invoke_career_graph(graph, update, cfg)
     return {
         "thread_id": thread_id,
         "user_message": user_message,

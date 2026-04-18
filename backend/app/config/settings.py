@@ -19,6 +19,10 @@ class Settings(BaseSettings):
 
     app_name: str = "Career Copilot"
     debug: bool = False
+    cors_allow_origins: str = Field(
+        default="http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173",
+        description="Comma-separated origins for browser clients; use * to allow any (no credentials).",
+    )
 
     database_url: str | None = Field(
         default=None,

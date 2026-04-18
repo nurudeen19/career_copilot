@@ -1,12 +1,20 @@
-"""Application entry: FastAPI ASGI `app` and CLI pipeline when run as a script."""
+"""ASGI entry: ``app`` is the FastAPI instance (e.g. ``uvicorn app.main:app``); CLI uses ``main()`` below."""
 
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.api import api_router
 from app.config.settings import get_settings
 from app.core.bootstrap import init_app, shutdown_app, verify_database_connection
+
+
+def _cors_allow_origins(raw: str) -> list[str]:
+    s = (raw or "").strip()
+    if s == "*":
+        return ["*"]
+    return [x.strip() for x in s.split(",") if x.strip()]
 
 
 @asynccontextmanager
@@ -24,6 +32,15 @@ async def lifespan(_app: FastAPI):
 def create_app() -> FastAPI:
     settings = get_settings()
     application = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=lifespan)
+    origins = _cors_allow_origins(settings.cors_allow_origins)
+    if origins:
+        application.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_credentials=False if origins == ["*"] else True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
     application.include_router(api_router)
     return application
 
