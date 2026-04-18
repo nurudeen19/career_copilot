@@ -92,8 +92,6 @@ def reset_agent_runtime() -> None:
     """Clear the default runtime (tests or config reload)."""
     global _runtime
     _runtime = None
-    from app.agents.registry import reset_agent_bundle
-    from app.graph.career_workflow import reset_career_workflow
+    from app.graph.career_graph import reset_graph
 
-    reset_agent_bundle()
-    reset_career_workflow()
+    reset_graph()

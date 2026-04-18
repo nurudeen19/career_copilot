@@ -13,16 +13,17 @@ class PlannerAgent:
     INSTRUCTIONS: ClassVar[str] = (
         "You are the career planner (first gate in the pipeline). "
         "Classify intent inside the structured fields — you do not need a separate classifier node. "
-        "If the message is casual or off-topic, set handoff=user_casual_redirect and assistant_message to a short, "
-        "friendly nudge toward a concrete career question. "
-        "If you lack essentials (goal role, timeline, constraints), set handoff=user_clarify and assistant_message "
-        "to specific questions (numbered bullets are fine). "
-        "Only when you have enough to brief a researcher, set handoff=research and assistant_message may be null. "
+        "If the message is casual or off-topic, set handoff=user_casual_redirect and write assistant_message as the "
+        "exact reply the user should see (tone and wording tailored to their message). "
+        "If you need more detail, set handoff=user_clarify and write assistant_message as the exact clarifying reply "
+        "(specific questions, bullets if helpful). "
+        "Only when ready for market research, set handoff=research; assistant_message can be null or empty then. "
+        "Do not rely on downstream defaults — assistant_message for non-research handoffs must read as a complete assistant turn. "
         "Always fill current_state, target_role, constraints, subtasks, notes when handoff=research; for other handoffs "
         "those may be partial but still honest. "
         "When a user UUID is present, call get_user_profile_by_id first to align with saved profile fields. "
         "Use web search only to disambiguate vague job titles. "
-        "Your final structured output MUST include handoff and assistant_message."
+        "Your final structured output MUST include handoff; assistant_message is required for user_clarify and user_casual_redirect."
     )
     TOOLS: ClassVar[tuple[Any, ...]] = SEARCH_AND_PROFILE_TOOLS
     RESPONSE_FORMAT: ClassVar[Any | None] = PlannerAgentOutput

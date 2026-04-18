@@ -1,4 +1,4 @@
-"""LangGraph: validate → planner → (research → analyst → critic → synthesizer) or user handoff; feedback → planner."""
+"""Career LangGraph: build_graph + run_graph, checkpointed memory; input checks live in ``app.guardrails``."""
 
 from __future__ import annotations
 
@@ -17,6 +17,8 @@ from app.agents.planner import PlannerAgent
 from app.agents.research import ResearchAgent
 from app.agents.synthesizer import SynthesizerAgent
 from app.core.agent_runtime import AgentRuntime, get_agent_runtime
+from app.graph.checkpoint import dispose_checkpointer, get_checkpointer
+from app.guardrails import run_user_input_guardrails
 from app.schema.agent_outputs import (
     AnalystAgentOutput,
     CriticAgentOutput,
@@ -26,7 +28,7 @@ from app.schema.agent_outputs import (
     SynthesizerAgentOutput,
 )
 
-_compiled_workflow: Any | None = None
+_compiled: Any | None = None
 
 
 class CareerGraphState(TypedDict, total=False):
@@ -42,9 +44,10 @@ class CareerGraphState(TypedDict, total=False):
     feedback: NotRequired[dict[str, Any]]
 
 
-def reset_career_workflow() -> None:
-    global _compiled_workflow
-    _compiled_workflow = None
+def reset_graph() -> None:
+    global _compiled
+    _compiled = None
+    dispose_checkpointer()
 
 
 def _user_id_prefix(state: CareerGraphState) -> list[AnyMessage]:
@@ -63,36 +66,16 @@ def _structured(result: dict[str, Any], model_cls: type[Any]) -> Any | None:
     return sr if isinstance(sr, model_cls) else None
 
 
-def _validate_node(state: CareerGraphState) -> dict[str, Any]:
-    msgs = state.get("messages") or []
-    if not msgs:
-        return {"validation_error": "No message to process."}
-    last = msgs[-1]
-    if isinstance(last, HumanMessage):
-        text = str(last.content or "").strip()
-        if not text:
-            return {"validation_error": "Message was empty."}
-        if len(text) > 60000:
-            return {"validation_error": "Message is too long; shorten and resend."}
-        return {"validation_error": ""}
-    return {"validation_error": "Last message must be from the user."}
-
-
 def _validation_fail_node(state: CareerGraphState) -> dict[str, Any]:
     err = state.get("validation_error") or "Invalid input."
     return {"messages": [AIMessage(content=err)]}
 
 
-def _route_start(state: CareerGraphState) -> Literal["feedback", "validate"]:
+def _route_after_input(state: CareerGraphState) -> Literal["validation_fail", "feedback", "planner"]:
+    if state.get("validation_error"):
+        return "validation_fail"
     if (state.get("user_feedback") or "").strip():
         return "feedback"
-    return "validate"
-
-
-def _route_after_validate(state: CareerGraphState) -> Literal["validation_fail", "planner"]:
-    err = state.get("validation_error")
-    if err:
-        return "validation_fail"
     return "planner"
 
 
@@ -105,8 +88,15 @@ def _route_after_planner(state: CareerGraphState) -> Literal["research", "user_h
 
 def _user_handoff_node(state: CareerGraphState) -> dict[str, Any]:
     plan = state.get("plan") or {}
-    text = plan.get("assistant_message") or "Tell me a bit about the role or direction you want to explore."
-    return {"messages": [AIMessage(content=str(text))]}
+    text = (plan.get("assistant_message") or "").strip()
+    return {"messages": [AIMessage(content=text)]}
+
+
+def _make_input_validation_node(runtime: AgentRuntime):
+    def node(state: CareerGraphState) -> dict[str, Any]:
+        return run_user_input_guardrails(state, runtime.settings)
+
+    return node
 
 
 def _make_planner_node(runtime: AgentRuntime):
@@ -117,7 +107,8 @@ def _make_planner_node(runtime: AgentRuntime):
         if parsed is None:
             parsed = PlannerAgentOutput(
                 handoff="user_clarify",
-                assistant_message="I could not lock a plan yet — what role or transition are you targeting?",
+                notes="Structured planner output was missing; ask the user to restate their career goal.",
+                assistant_message="",
             )
         return {"plan": parsed.model_dump()}
 
@@ -236,9 +227,9 @@ def _make_feedback_node(runtime: AgentRuntime):
     return feedback_node
 
 
-def build_career_workflow(runtime: AgentRuntime) -> Any:
+def _compile_graph(runtime: AgentRuntime, checkpointer: Any) -> Any:
     g = StateGraph(CareerGraphState)
-    g.add_node("validate", _validate_node)
+    g.add_node("input_validation", _make_input_validation_node(runtime))
     g.add_node("validation_fail", _validation_fail_node)
     g.add_node("planner", _make_planner_node(runtime))
     g.add_node("research", _make_research_node(runtime))
@@ -248,11 +239,11 @@ def build_career_workflow(runtime: AgentRuntime) -> Any:
     g.add_node("feedback", _make_feedback_node(runtime))
     g.add_node("user_handoff", _user_handoff_node)
 
-    g.add_conditional_edges(START, _route_start, {"feedback": "feedback", "validate": "validate"})
+    g.add_edge(START, "input_validation")
     g.add_conditional_edges(
-        "validate",
-        _route_after_validate,
-        {"validation_fail": "validation_fail", "planner": "planner"},
+        "input_validation",
+        _route_after_input,
+        {"validation_fail": "validation_fail", "feedback": "feedback", "planner": "planner"},
     )
     g.add_edge("validation_fail", END)
     g.add_conditional_edges(
@@ -267,33 +258,66 @@ def build_career_workflow(runtime: AgentRuntime) -> Any:
     g.add_edge("synthesizer", END)
     g.add_edge("feedback", "planner")
 
-    return g.compile()
+    return g.compile(checkpointer=checkpointer)
 
 
-def get_career_workflow(runtime: AgentRuntime | None = None) -> Any:
-    global _compiled_workflow
+def build_graph(runtime: AgentRuntime | None = None) -> Any:
+    """Compile the career workflow once per process (with Postgres or SQLite checkpointing)."""
+    global _compiled
+    if _compiled is not None:
+        return _compiled
     r = runtime or get_agent_runtime()
-    if _compiled_workflow is None:
-        _compiled_workflow = build_career_workflow(r)
-    return _compiled_workflow
+    cp = get_checkpointer(r.settings)
+    _compiled = _compile_graph(r, cp)
+    return _compiled
 
 
-def run_career_workflow(
+def run_graph(
     user_message: str,
     *,
+    thread_id: str,
     user_id: str | None = None,
     user_feedback: str | None = None,
     runtime: AgentRuntime | None = None,
 ) -> dict[str, Any]:
-    """Run one turn through the career graph (normal or feedback re-entry)."""
-    wf = get_career_workflow(runtime)
+    """Execute one graph turn. Re-use ``thread_id`` to continue checkpointed memory."""
+    graph = build_graph(runtime or get_agent_runtime())
     initial: dict[str, Any] = {"messages": [HumanMessage(content=user_message)]}
     if user_id:
         initial["user_id"] = user_id
     if user_feedback:
         initial["user_feedback"] = user_feedback
-    final_state = wf.invoke(initial)
+    cfg: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
+    final_state = graph.invoke(initial, config=cfg)
     return {
+        "thread_id": thread_id,
+        "user_message": user_message,
+        "messages": final_state.get("messages"),
+        "plan": final_state.get("plan"),
+        "research": final_state.get("research"),
+        "analysis": final_state.get("analysis"),
+        "critique": final_state.get("critique"),
+        "synthesis": final_state.get("synthesis"),
+        "feedback": final_state.get("feedback"),
+    }
+
+
+def run_graph_continue(
+    *,
+    thread_id: str,
+    user_message: str,
+    user_id: str | None = None,
+    runtime: AgentRuntime | None = None,
+) -> dict[str, Any]:
+    """Append a user turn to an existing ``thread_id`` (loads prior checkpoint)."""
+    graph = build_graph(runtime or get_agent_runtime())
+    update = {"messages": [HumanMessage(content=user_message)]}
+    if user_id:
+        update["user_id"] = user_id
+    cfg: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
+    final_state = graph.invoke(update, config=cfg)
+    return {
+        "thread_id": thread_id,
         "user_message": user_message,
         "messages": final_state.get("messages"),
         "plan": final_state.get("plan"),

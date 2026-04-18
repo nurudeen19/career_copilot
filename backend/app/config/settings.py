@@ -43,6 +43,23 @@ class Settings(BaseSettings):
     )
     langchain_project: str | None = Field(default="career-copilot", description="LANGCHAIN_PROJECT for traces.")
 
+    max_user_input_chars: int = 1_000
+    max_user_estimated_tokens: int = 800
+    graph_checkpoint_sqlite_path: str = ".data/langgraph_checkpoints.sqlite"
+
+    huggingface_token: str | None = Field(
+        default=None,
+        description="Hugging Face token (Llama Prompt Guard 2). If unset, HF_TOKEN / HUGGING_FACE_HUB_TOKEN env is used.",
+    )
+    prompt_guard_model_id: str = Field(
+        default="meta-llama/Llama-Prompt-Guard-2-86M",
+        description="HF model id for user-input prompt-injection classification.",
+    )
+    prompt_guard_device: int = Field(
+        default=-1,
+        description="Transformers pipeline device: -1 CPU, 0+ CUDA index.",
+    )
+
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
 
 

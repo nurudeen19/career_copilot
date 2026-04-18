@@ -1,8 +1,10 @@
 """Structured final responses per agent (LangChain ``response_format``)."""
 
-from typing import Any, Literal
+from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from typing import Any, Literal, Self
+
+from pydantic import BaseModel, Field, model_validator
 
 
 class PlannerConstraints(BaseModel):
@@ -28,6 +30,31 @@ class PlannerAgentOutput(BaseModel):
         default=None,
         description="When handoff is not research, the user-facing reply (questions or redirect).",
     )
+
+    @model_validator(mode="after")
+    def compose_assistant_message_from_planner_fields(self) -> Self:
+        """Never rely on graph-level static copy: derive missing user text only from planner fields."""
+        if self.handoff == "research":
+            return self
+        if (self.assistant_message or "").strip():
+            self.assistant_message = (self.assistant_message or "").strip()
+            return self
+        chunks: list[str] = []
+        if self.current_state:
+            chunks.append(str(self.current_state).strip())
+        if self.target_role:
+            chunks.append(str(self.target_role).strip())
+        c = self.constraints.model_dump(exclude_none=True)
+        if c:
+            parts = [f"{k}: {v}" for k, v in c.items()]
+            chunks.append("Constraints — " + "; ".join(parts))
+        if self.subtasks:
+            chunks.append("Here are some focused questions:\n" + "\n".join(f"- {s}" for s in self.subtasks))
+        if self.notes:
+            chunks.append(self.notes.strip())
+        merged = "\n\n".join(x for x in chunks if x).strip()
+        self.assistant_message = merged or None
+        return self
 
 
 class ResearchSourceRef(BaseModel):
