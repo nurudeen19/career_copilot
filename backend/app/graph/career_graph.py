@@ -21,6 +21,7 @@ from app.agents.research import ResearchAgent
 from app.agents.synthesizer import SynthesizerAgent
 from app.core.agent_runtime import AgentRuntime, get_agent_runtime
 from app.core.retry_policy import WORKFLOW_RETRY
+from app.graph.agent_invoke import invoke_agent_with_resilience
 from app.graph.checkpoint import dispose_checkpointer, get_checkpointer
 from app.guardrails import run_user_input_guardrails
 from app.tools.runtime_context import workflow_user_id as workflow_user_id_var
@@ -126,10 +127,27 @@ def _make_planner_node(runtime: AgentRuntime):
     def planner_node(state: CareerGraphState) -> dict[str, Any]:
         msgs = list(state.get("messages") or [])
         uid = (state.get("user_id") or "").strip() or None
-        out = _invoke_agent_graph(
-            PlannerAgent(runtime).graph,
-            _user_id_prefix(state) + msgs,
-            workflow_user_id=uid,
+
+        def _fb(_exc: BaseException) -> dict[str, Any]:
+            return {
+                "plan": PlannerAgentOutput(
+                    handoff="user_clarify",
+                    notes="Planning service error; ask the user to retry.",
+                    assistant_message=(
+                        "We couldn’t reach the planning service just now. "
+                        "Please try again in a moment or shorten your question."
+                    ),
+                ).model_dump()
+            }
+
+        out = invoke_agent_with_resilience(
+            lambda: _invoke_agent_graph(
+                PlannerAgent(runtime).graph,
+                _user_id_prefix(state) + msgs,
+                workflow_user_id=uid,
+            ),
+            step="planner",
+            fallback=_fb,
         )
         parsed = _structured(out, PlannerAgentOutput)
         if parsed is None:
@@ -152,10 +170,22 @@ def _make_research_node(runtime: AgentRuntime):
             )
         ]
         uid = (state.get("user_id") or "").strip() or None
-        out = _invoke_agent_graph(
-            ResearchAgent(runtime).graph,
-            _user_id_prefix(state) + msgs + ctx,
-            workflow_user_id=uid,
+
+        def _fb(_exc: BaseException) -> dict[str, Any]:
+            return {
+                "research": ResearchAgentOutput(
+                    notes="Research tools or model were unavailable; later steps use limited market context.",
+                ).model_dump()
+            }
+
+        out = invoke_agent_with_resilience(
+            lambda: _invoke_agent_graph(
+                ResearchAgent(runtime).graph,
+                _user_id_prefix(state) + msgs + ctx,
+                workflow_user_id=uid,
+            ),
+            step="research",
+            fallback=_fb,
         )
         parsed = _structured(out, ResearchAgentOutput)
         return {"research": parsed.model_dump() if parsed else {}}
@@ -175,10 +205,22 @@ def _make_analyst_node(runtime: AgentRuntime):
             )
         ]
         uid = (state.get("user_id") or "").strip() or None
-        out = _invoke_agent_graph(
-            AnalystAgent(runtime).graph,
-            _user_id_prefix(state) + msgs + ctx,
-            workflow_user_id=uid,
+
+        def _fb(_exc: BaseException) -> dict[str, Any]:
+            return {
+                "analysis": AnalystAgentOutput(
+                    notes="Analysis model was unavailable; critic and synthesis may be thinner than usual.",
+                ).model_dump()
+            }
+
+        out = invoke_agent_with_resilience(
+            lambda: _invoke_agent_graph(
+                AnalystAgent(runtime).graph,
+                _user_id_prefix(state) + msgs + ctx,
+                workflow_user_id=uid,
+            ),
+            step="analyst",
+            fallback=_fb,
         )
         parsed = _structured(out, AnalystAgentOutput)
         return {"analysis": parsed.model_dump() if parsed else {}}
@@ -200,10 +242,22 @@ def _make_critic_node(runtime: AgentRuntime):
             )
         ]
         uid = (state.get("user_id") or "").strip() or None
-        out = _invoke_agent_graph(
-            CriticAgent(runtime).graph,
-            _user_id_prefix(state) + msgs + ctx,
-            workflow_user_id=uid,
+
+        def _fb(_exc: BaseException) -> dict[str, Any]:
+            return {
+                "critique": CriticAgentOutput(
+                    notes="Critic pass skipped (service unavailable); synthesis proceeds with unchallenged analysis.",
+                ).model_dump()
+            }
+
+        out = invoke_agent_with_resilience(
+            lambda: _invoke_agent_graph(
+                CriticAgent(runtime).graph,
+                _user_id_prefix(state) + msgs + ctx,
+                workflow_user_id=uid,
+            ),
+            step="critic",
+            fallback=_fb,
         )
         parsed = _structured(out, CriticAgentOutput)
         return {"critique": parsed.model_dump() if parsed else {}}
@@ -230,10 +284,28 @@ def _make_synthesizer_node(runtime: AgentRuntime):
             )
         ]
         uid = (state.get("user_id") or "").strip() or None
-        out = _invoke_agent_graph(
-            SynthesizerAgent(runtime).graph,
-            _user_id_prefix(state) + msgs + ctx,
-            workflow_user_id=uid,
+
+        def _fb(_exc: BaseException) -> dict[str, Any]:
+            body = (
+                "We couldn’t generate your full career summary because the synthesis service was unavailable. "
+                "Please try again shortly."
+            )
+            return {
+                "synthesis": SynthesizerAgentOutput(
+                    recommendation=body,
+                    notes="Degraded response after synthesis failure.",
+                ).model_dump(),
+                "messages": [AIMessage(content=body)],
+            }
+
+        out = invoke_agent_with_resilience(
+            lambda: _invoke_agent_graph(
+                SynthesizerAgent(runtime).graph,
+                _user_id_prefix(state) + msgs + ctx,
+                workflow_user_id=uid,
+            ),
+            step="synthesizer",
+            fallback=_fb,
         )
         parsed = _structured(out, SynthesizerAgentOutput)
         if parsed is None:
@@ -255,10 +327,32 @@ def _make_feedback_node(runtime: AgentRuntime):
         fb_raw = (state.get("user_feedback") or "").strip()
         ctx = [SystemMessage(content=f"User dissatisfaction or correction:\n{fb_raw}")]
         uid = (state.get("user_id") or "").strip() or None
-        out = _invoke_agent_graph(
-            FeedbackAgent(runtime).graph,
-            _user_id_prefix(state) + msgs + ctx,
-            workflow_user_id=uid,
+
+        def _fb(_exc: BaseException) -> dict[str, Any]:
+            re_plan = SystemMessage(
+                content=(
+                    "Return to planning. Prior plan JSON (may revise, do not blindly repeat):\n"
+                    + json.dumps(state.get("plan", {}), default=str)[:8000]
+                    + "\nFeedback agent was unavailable; incorporate the user’s feedback above manually."
+                )
+            )
+            return {
+                "feedback": FeedbackAgentOutput(
+                    adaptation_hints=[],
+                    notes="Feedback interpretation skipped (service error).",
+                ).model_dump(),
+                "user_feedback": "",
+                "messages": [re_plan],
+            }
+
+        out = invoke_agent_with_resilience(
+            lambda: _invoke_agent_graph(
+                FeedbackAgent(runtime).graph,
+                _user_id_prefix(state) + msgs + ctx,
+                workflow_user_id=uid,
+            ),
+            step="feedback",
+            fallback=_fb,
         )
         parsed = _structured(out, FeedbackAgentOutput)
         hints = parsed.adaptation_hints if isinstance(parsed, FeedbackAgentOutput) else []

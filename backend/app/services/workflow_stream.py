@@ -96,9 +96,24 @@ def iter_workflow_sse(
                 return
             attempt += 1
             if attempt >= max_stream_attempts:
+                _log.warning(
+                    "workflow_stream_giving_up thread_id=%s attempts=%s detail=%s",
+                    tid,
+                    attempt,
+                    exc,
+                )
                 yield _sse_line({"event": "error", "thread_id": tid, "detail": str(exc)})
                 return
-            time.sleep(min(8.0, 0.5 * (2 ** (attempt - 1))))
+            delay = min(8.0, 0.5 * (2 ** (attempt - 1)))
+            _log.warning(
+                "workflow_stream_retry thread_id=%s attempt=%s/%s sleep_s=%.2f detail=%s",
+                tid,
+                attempt,
+                max_stream_attempts,
+                delay,
+                exc,
+            )
+            time.sleep(delay)
 
 
 def _sse_producer(

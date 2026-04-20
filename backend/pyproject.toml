@@ -34,6 +34,7 @@ dependencies = [
     "torch>=2.6",
     "tenacity>=9.0",
     "mailtrap>=2.5.0",
+    "slowapi>=0.1.9",
 ]
 
 [project.optional-dependencies]

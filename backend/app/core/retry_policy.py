@@ -1,9 +1,14 @@
-"""Shared transient-error detection and Tenacity defaults for graph invoke / stream retries."""
+"""Transient-error detection and Tenacity defaults for graph invoke, streaming, and per-agent calls."""
 
 from __future__ import annotations
 
+import logging
+import ssl
+
 import httpx
-from tenacity import retry_if_exception, stop_after_attempt, wait_exponential
+from tenacity import before_sleep_log, retry_if_exception, stop_after_attempt, wait_exponential
+
+_log = logging.getLogger("app.retry")
 
 _OPENAI_RETRY: tuple[type[BaseException], ...] = ()
 try:
@@ -15,9 +20,14 @@ except ImportError:  # pragma: no cover
 
 
 def is_transient_workflow_error(exc: BaseException) -> bool:
-    """HTTP / provider blips worth retrying; not validation or auth failures."""
+    """Network / overload / remote blips worth retrying; not validation, auth, or bad requests."""
     if isinstance(exc, (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError)):
         return True
+    if isinstance(exc, ssl.SSLError):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code
+        return code in (408, 425, 429, 500, 502, 503, 504)
     if _OPENAI_RETRY and isinstance(exc, _OPENAI_RETRY):
         return True
     return False
@@ -28,4 +38,14 @@ WORKFLOW_RETRY = dict(
     wait=wait_exponential(multiplier=0.5, min=0.5, max=8),
     retry=retry_if_exception(is_transient_workflow_error),
     reraise=True,
+    before_sleep=before_sleep_log(_log, logging.WARNING),
+)
+
+# Per-agent leaf retries (before degraded fallback). Slightly tighter max wait than whole-graph.
+AGENT_INVOKE_POLICY = dict(
+    stop=stop_after_attempt(4),
+    wait=wait_exponential(multiplier=0.35, min=0.4, max=6),
+    retry=retry_if_exception(is_transient_workflow_error),
+    reraise=True,
+    before_sleep=before_sleep_log(_log, logging.INFO),
 )

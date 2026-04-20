@@ -2,11 +2,12 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_current_user
 from app.core.agent_runtime import get_agent_runtime
+from app.core.rate_limit import limiter, limit_workflow_stream
 from app.models.user import User
 from app.schema.workflow import WorkflowStreamRequest
 from app.services.workflow_stream import aiter_workflow_sse
@@ -15,7 +16,9 @@ router = APIRouter()
 
 
 @router.post("/stream")
+@limiter.limit(limit_workflow_stream)
 async def post_workflow_stream(
+    request: Request,
     body: WorkflowStreamRequest,
     user: Annotated[User, Depends(get_current_user)],
 ) -> StreamingResponse:
@@ -23,6 +26,7 @@ async def post_workflow_stream(
     Run one workflow turn; SSE ``data:`` lines carry each node's ``patch`` until ``event: done``.
     Input size + prompt guard run inside the graph before planner/research.
     """
+    _ = request.app
     rt = get_agent_runtime()
     return StreamingResponse(
         aiter_workflow_sse(body, user, runtime=rt),

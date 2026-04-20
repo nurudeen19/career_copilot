@@ -56,6 +56,25 @@ class Settings(BaseSettings):
         description="If true, skip Mailtrap on register and mark email verified (tests/local only).",
     )
 
+    rate_limit_enabled: bool = Field(
+        default=True,
+        description="When false, SlowAPI limits are effectively disabled (very high ceilings).",
+    )
+    rate_limit_login: str = Field(default="20/minute", description="Limit string for POST /auth/login.")
+    rate_limit_register: str = Field(default="10/minute", description="Limit for POST /auth/register.")
+    rate_limit_auth_email: str = Field(
+        default="8/minute",
+        description="Limit for POST /auth/resend-verification and /auth/forgot-password.",
+    )
+    rate_limit_verify_email_get: str = Field(default="45/minute", description="Limit for GET /auth/verify-email.")
+    rate_limit_reset_password: str = Field(
+        default="15/minute",
+        description="Limit for POST /auth/reset-password and GET reset form.",
+    )
+    rate_limit_profile: str = Field(default="120/minute", description="Limit for GET/PATCH /profile.")
+    rate_limit_workflow_stream: str = Field(default="24/minute", description="Limit for POST /workflow/stream.")
+    rate_limit_health: str = Field(default="120/minute", description="Limit for GET /health.")
+
     openai_api_key: str | None = None
     groq_api_key: str | None = None
     openrouter_api_key: str | None = None

@@ -11,6 +11,7 @@ from app.api.api import api_router
 from app.config.settings import get_settings
 from app.core.bootstrap import init_app, shutdown_app, verify_database_connection
 from app.core.logging_config import configure_logging
+from app.core.rate_limit import install_rate_limits
 from app.core.request_logging import RequestLoggingMiddleware
 
 _lifecycle_log = logging.getLogger("app.lifecycle")
@@ -53,6 +54,7 @@ def create_app() -> FastAPI:
     configure_logging(settings)
     _lifecycle_log.info("Creating FastAPI app=%r debug=%s", settings.app_name, settings.debug)
     application = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=lifespan)
+    install_rate_limits(application)
     origins = _cors_allow_origins(settings.cors_allow_origins)
     if origins:
         application.add_middleware(

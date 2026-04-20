@@ -3,12 +3,21 @@
 import html
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.config.settings import Settings, get_settings
+from app.core.rate_limit import (
+    limiter,
+    limit_auth_email,
+    limit_login,
+    limit_register,
+    limit_reset_password,
+    limit_verify_email_get,
+    limit_profile,
+)
 from app.db.session import get_db
 from app.models.user import User
 from app.schema.auth import (
@@ -26,11 +35,14 @@ router = APIRouter()
 
 
 @router.post("/register", response_model=UserResponse)
+@limiter.limit(limit_register)
 def register(
+    request: Request,
     body: RegisterRequest,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> UserResponse:
+    _ = request.app
     user = auth_service.register_user(db, body.name, body.email, body.password, settings)
     return UserResponse(
         id=user.id,
@@ -42,11 +54,14 @@ def register(
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit(limit_login)
 def login(
+    request: Request,
     body: LoginRequest,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> TokenResponse:
+    _ = request.app
     token, user = auth_service.login_user(db, body.email, body.password, settings)
     return TokenResponse(
         access_token=token,
@@ -61,7 +76,12 @@ def login(
 
 
 @router.get("/me", response_model=UserResponse)
-def read_current_user(user: User = Depends(get_current_user)) -> UserResponse:
+@limiter.limit(limit_profile)
+def read_current_user(
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> UserResponse:
+    _ = request.app
     return UserResponse(
         id=user.id,
         name=user.name,
@@ -72,22 +92,28 @@ def read_current_user(user: User = Depends(get_current_user)) -> UserResponse:
 
 
 @router.get("/verify-email", response_model=MessageResponse)
+@limiter.limit(limit_verify_email_get)
 def verify_email(
+    request: Request,
     token: str = Query(min_length=10),
     user_id: uuid.UUID = Query(alias="user_id"),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> MessageResponse:
+    _ = request.app
     auth_service.verify_email_with_token(db, user_id, token, settings)
     return MessageResponse(detail="Email verified. You can sign in.")
 
 
 @router.post("/resend-verification", response_model=MessageResponse)
+@limiter.limit(limit_auth_email)
 def resend_verification(
+    request: Request,
     body: EmailRequest,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> MessageResponse:
+    _ = request.app
     auth_service.resend_verification_email(db, body.email, settings)
     return MessageResponse(
         detail="If that address is registered and not yet verified, a new message was sent.",
@@ -95,11 +121,14 @@ def resend_verification(
 
 
 @router.get("/reset-password", response_class=HTMLResponse)
+@limiter.limit(limit_reset_password)
 def reset_password_form(
+    request: Request,
     token: str = Query(min_length=10),
     user_id: uuid.UUID = Query(alias="user_id"),
 ) -> HTMLResponse:
     """Minimal browser page to complete a reset (link from email)."""
+    _ = request.app
     safe_t = html.escape(token, quote=True)
     safe_uid = html.escape(str(user_id), quote=True)
     page = f"""<!DOCTYPE html>
@@ -136,11 +165,14 @@ def reset_password_form(
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
+@limiter.limit(limit_auth_email)
 def forgot_password(
+    request: Request,
     body: EmailRequest,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> MessageResponse:
+    _ = request.app
     auth_service.request_password_reset(db, body.email, settings)
     return MessageResponse(
         detail="If that address is registered, password reset instructions were sent.",
@@ -148,10 +180,13 @@ def forgot_password(
 
 
 @router.post("/reset-password", response_model=MessageResponse)
+@limiter.limit(limit_reset_password)
 def reset_password(
+    request: Request,
     body: ResetPasswordRequest,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> MessageResponse:
+    _ = request.app
     auth_service.reset_password_with_token(db, body.user_id, body.token, body.password, settings)
     return MessageResponse(detail="Password updated. You can sign in with your new password.")

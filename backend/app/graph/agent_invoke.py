@@ -1,0 +1,36 @@
+"""Per-agent invoke with Tenacity retries and non-transient fallbacks so the graph can finish."""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Callable
+from typing import Any
+
+from tenacity import Retrying
+
+from app.core.retry_policy import AGENT_INVOKE_POLICY, is_transient_workflow_error
+
+_log = logging.getLogger(__name__)
+
+
+def invoke_agent_with_resilience(
+    call: Callable[[], dict[str, Any]],
+    *,
+    step: str,
+    fallback: Callable[[BaseException], dict[str, Any]],
+) -> dict[str, Any]:
+    """
+    Run ``call()`` (typically ``agent_graph.invoke``) with retries on transient errors.
+
+    After retries, **transient** errors are re-raised (outer graph / SSE layer may retry).
+    **Non-transient** or exhausted-transient failures use ``fallback(exc)`` so the workflow continues.
+    """
+    r = Retrying(**AGENT_INVOKE_POLICY)
+    try:
+        return r(call)
+    except Exception as exc:
+        if is_transient_workflow_error(exc):
+            _log.warning("agent_step_transient_exhausted step=%s: %s", step, exc)
+            raise
+        _log.exception("agent_step_failed_using_fallback step=%s", step)
+        return fallback(exc)

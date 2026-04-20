@@ -5,10 +5,11 @@ from __future__ import annotations
 import logging
 from typing import Any, Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from app.config.settings import get_settings
+from app.core.rate_limit import limiter, limit_health
 from app.db.session import database_health
 from app.guardrails.prompt_guard import is_prompt_guard_loaded
 
@@ -34,7 +35,9 @@ class HealthResponse(BaseModel):
 
 
 @router.get("/health", response_model=HealthResponse)
-def get_health() -> HealthResponse:
+@limiter.limit(limit_health)
+def get_health(request: Request) -> HealthResponse:
+    _ = request.app
     """
     Public endpoint: database connectivity (when configured) and prompt-guard load state.
     ``degraded``: optional components missing (e.g. DB not configured in dev); ``unhealthy``: DB configured but failing.

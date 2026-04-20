@@ -30,3 +30,12 @@ def test_non_transient_http_status_error() -> None:
         response=httpx.Response(400, request=httpx.Request("GET", "https://example.com")),
     )
     assert not is_transient_workflow_error(exc)
+
+
+def test_transient_http_status_error_503() -> None:
+    exc = httpx.HTTPStatusError(
+        "msg",
+        request=httpx.Request("GET", "https://example.com"),
+        response=httpx.Response(503, request=httpx.Request("GET", "https://example.com")),
+    )
+    assert is_transient_workflow_error(exc)
