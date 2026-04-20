@@ -314,6 +314,17 @@ def _compile_graph(runtime: AgentRuntime, checkpointer: Any) -> Any:
     return g.compile(checkpointer=checkpointer)
 
 
+def compile_career_graph_for_visualization(runtime: AgentRuntime | None = None) -> Any:
+    """Compile the workflow with an in-memory checkpointer for structure export (PNG, docs).
+
+    Does not touch the process-wide ``build_graph`` cache or create Postgres / SQLite savers.
+    """
+    from langgraph.checkpoint.memory import MemorySaver
+
+    r = runtime or get_agent_runtime()
+    return _compile_graph(r, MemorySaver())
+
+
 def build_graph(runtime: AgentRuntime | None = None) -> Any:
     """Compile the career workflow once per process (with Postgres or SQLite checkpointing)."""
     global _compiled

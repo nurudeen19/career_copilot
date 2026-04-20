@@ -13,3 +13,5 @@ build/
 node_modules/
 frontend/dist/
 *.local
+backend/todo.md
+backend/graphs/
