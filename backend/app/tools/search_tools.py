@@ -1,4 +1,4 @@
-"""LangChain web search tools: Tavily via langchain-tavily, Brave via REST (rich results)."""
+"""LangChain web search tools: Tavily via langchain-tavily, Brave via REST (LLM Context API for agent-grade excerpts)."""
 
 from __future__ import annotations
 
@@ -91,61 +91,99 @@ def _tavily_raw_to_response(query: str, raw: dict[str, Any]) -> SearchToolRespon
     return SearchToolResponse(provider="tavily", query=query, overview=overview, hits=hits)
 
 
-def _brave_row_to_hit(rank: int, row: dict[str, Any]) -> SearchHit:
-    description = str(row.get("description") or "")
-    snippets_raw = row.get("extra_snippets")
+def _brave_snippets_to_summary(snippets: Any) -> str:
+    """Join LLM Context snippet list (strings or serialized structures) into one summary block."""
+    if not isinstance(snippets, list):
+        return ""
     parts: list[str] = []
-    if description:
-        parts.append(description)
-    if isinstance(snippets_raw, list):
-        for s in snippets_raw:
-            if isinstance(s, str) and s.strip():
-                parts.append(s.strip())
-    summary = _truncate("\n\n".join(parts)) if parts else ""
-
-    meta: dict[str, Any] = {}
-    for key in ("page_age", "age", "language", "family_friendly", "type"):
-        if row.get(key) is not None:
-            meta[key] = row.get(key)
-
-    # Some Brave payloads include a short subtype or source hint
-    if row.get("meta_url") and isinstance(row["meta_url"], dict):
-        meta["site"] = row["meta_url"].get("hostname")
-
-    score = row.get("confidence") or row.get("score")
-    rel = float(score) if isinstance(score, (int, float)) else None
-
-    return SearchHit(
-        rank=rank,
-        title=str(row.get("title", "")),
-        url=str(row.get("url", "")),
-        summary=summary,
-        source="brave",
-        relevance_score=rel,
-        meta=meta,
-    )
+    for s in snippets:
+        if isinstance(s, str) and s.strip():
+            parts.append(s.strip())
+        elif s is not None:
+            t = str(s).strip()
+            if t:
+                parts.append(t)
+    return _truncate("\n\n".join(parts)) if parts else ""
 
 
-def _brave_data_to_response(query: str, data: dict[str, Any]) -> SearchToolResponse:
-    overview: str | None = None
-    summarizer = data.get("summarizer")
-    if isinstance(summarizer, dict):
-        # Shape varies by plan; keep best-effort string for agents
-        overview = summarizer.get("summary") or summarizer.get("text")
-        if overview is not None and not isinstance(overview, str):
-            overview = str(overview)
+def _brave_llm_context_to_response(query: str, data: dict[str, Any]) -> SearchToolResponse:
+    """
+    Map Brave ``/res/v1/llm/context`` JSON into ``SearchToolResponse``.
 
-    web = data.get("web")
-    raw = web.get("results") if isinstance(web, dict) else None
-    if not isinstance(raw, list):
+    See: https://api-dashboard.search.brave.com/documentation/services/llm-context
+    """
+    grounding = data.get("grounding")
+    if not isinstance(grounding, dict):
         return SearchToolResponse(
             provider="brave",
             query=query,
-            overview=overview,
-            error="Missing or invalid 'web.results' in Brave response.",
+            error="Missing or invalid 'grounding' in Brave LLM Context response.",
         )
 
-    hits = [_brave_row_to_hit(i, row) for i, row in enumerate(raw, start=1) if isinstance(row, dict)]
+    sources_raw = data.get("sources")
+    sources_meta: dict[str, Any] = sources_raw if isinstance(sources_raw, dict) else {}
+
+    hits: list[SearchHit] = []
+    rank = 0
+
+    def _append_block(block: dict[str, Any], *, kind: str) -> None:
+        nonlocal rank
+        url = str(block.get("url") or "").strip()
+        title = str(block.get("title") or "").strip()
+        summary = _brave_snippets_to_summary(block.get("snippets"))
+        if not url and not summary:
+            return
+        rank += 1
+        meta: dict[str, Any] = {"brave_grounding": kind}
+        src = sources_meta.get(url) if url else None
+        if isinstance(src, dict):
+            if src.get("hostname"):
+                meta["site"] = src.get("hostname")
+            if src.get("age") is not None:
+                meta["age"] = src.get("age")
+            if src.get("title") and not title:
+                title = str(src["title"])
+
+        hits.append(
+            SearchHit(
+                rank=rank,
+                title=title or url or f"Source {rank}",
+                url=url,
+                summary=summary or "(no extracted snippets)",
+                source="brave",
+                relevance_score=None,
+                meta=meta,
+            )
+        )
+
+    for row in grounding.get("generic") or []:
+        if isinstance(row, dict):
+            _append_block(row, kind="generic")
+
+    poi = grounding.get("poi")
+    if isinstance(poi, dict):
+        _append_block(poi, kind="poi")
+
+    for row in grounding.get("map") or []:
+        if isinstance(row, dict):
+            _append_block(row, kind="map")
+
+    if not hits:
+        return SearchToolResponse(
+            provider="brave",
+            query=query,
+            overview="Brave LLM Context returned no grounded excerpts for this query.",
+            hits=[],
+        )
+
+    overview_chunks: list[str] = []
+    for h in hits[:3]:
+        if h.summary and h.summary != "(no extracted snippets)":
+            overview_chunks.append(h.summary[:500])
+        if sum(len(x) for x in overview_chunks) > 1400:
+            break
+    overview = _truncate("\n---\n".join(overview_chunks), max_len=2000) if overview_chunks else None
+
     return SearchToolResponse(provider="brave", query=query, overview=overview, hits=hits)
 
 
@@ -175,7 +213,12 @@ def tavily_web_search(query: str) -> str:
 
 @tool
 def brave_web_search(query: str) -> str:
-    """Search the web with Brave (REST). Richer snippets + extra_snippets. Returns JSON: SearchToolResponse schema."""
+    """
+    Search the web with Brave **LLM Context** (REST): pre-extracted, relevance-filtered passages per URL,
+    optimized for agents / RAG (vs. classic web search links + short snippets only).
+
+    Returns JSON: SearchToolResponse schema.
+    """
     key = get_settings().brave_search_api_key
     q = (query or "").strip()
     if not key:
@@ -186,12 +229,13 @@ def brave_web_search(query: str) -> str:
     try:
         with httpx.Client(timeout=45.0) as client:
             r = client.get(
-                "https://api.search.brave.com/res/v1/web/search",
+                "https://api.search.brave.com/res/v1/llm/context",
                 params={
                     "q": q,
-                    "count": 10,
-                    "text_decorations": False,
-                    "extra_snippets": True,
+                    "count": 15,
+                    "maximum_number_of_urls": 15,
+                    "maximum_number_of_tokens": 8192,
+                    "context_threshold_mode": "balanced",
                 },
                 headers={
                     "Accept": "application/json",
@@ -201,12 +245,12 @@ def brave_web_search(query: str) -> str:
             r.raise_for_status()
             data = r.json()
     except httpx.HTTPError as exc:
-        return SearchToolResponse(provider="brave", query=q, error=f"Brave request failed: {exc}").to_agent_text()
+        return SearchToolResponse(provider="brave", query=q, error=f"Brave LLM Context request failed: {exc}").to_agent_text()
 
     if not isinstance(data, dict):
         return SearchToolResponse(provider="brave", query=q, error="Unexpected Brave response type.").to_agent_text()
 
-    return _brave_data_to_response(q, data).to_agent_text()
+    return _brave_llm_context_to_response(q, data).to_agent_text()
 
 
 SEARCH_TOOLS = (tavily_web_search, brave_web_search)
