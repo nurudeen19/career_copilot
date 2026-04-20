@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
-import { apiFetch } from '@/api/client'
+import { apiFetch, ApiError } from '@/api/client'
+import { useAuthStore } from '@/stores/auth'
 import type { Profile, ProfilePatch } from '@/types/models'
 import { isProfileComplete } from '@/utils/profile'
 
@@ -18,6 +19,9 @@ export const useProfileStore = defineStore('profile', () => {
     try {
       profile.value = await apiFetch<Profile>('/profile')
     } catch (e) {
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+        useAuthStore().logout()
+      }
       error.value = e instanceof Error ? e.message : 'Could not load profile'
       profile.value = null
     } finally {

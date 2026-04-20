@@ -14,12 +14,18 @@ const password = ref('')
 const error = ref<string | null>(null)
 const loading = ref(false)
 const welcome = ref<string | null>(null)
+const resendLoading = ref(false)
+const resendMessage = ref<string | null>(null)
 
 onMounted(() => {
-  if (!auth.isAuthenticated) auth.persistUser(null)
+  if (!auth.token) auth.persistUser(null)
   const q = route.query
   if (q.registered === '1' && typeof q.name === 'string') {
-    welcome.value = `Thanks, ${q.name}. You can sign in whenever you’re ready.`
+    if (q.verify === '1') {
+      welcome.value = `Thanks, ${q.name}. Check your email for a verification link before signing in.`
+    } else {
+      welcome.value = `Thanks, ${q.name}. You can sign in whenever you’re ready.`
+    }
   }
   if (typeof q.email === 'string') email.value = q.email
 })
@@ -32,9 +38,33 @@ async function onSubmit() {
     const next = typeof route.query.next === 'string' ? route.query.next : '/dashboard'
     await router.push(next || '/dashboard')
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail : e instanceof Error ? e.message : 'Sign in failed'
+    if (e instanceof ApiError && e.status === 403) {
+      error.value =
+        'This email is not verified yet. Open the link we sent you, or resend the message below.'
+    } else {
+      error.value = e instanceof ApiError ? e.detail : e instanceof Error ? e.message : 'Sign in failed'
+    }
   } finally {
     loading.value = false
+  }
+}
+
+async function onResend() {
+  resendMessage.value = null
+  const addr = email.value.trim()
+  if (!addr) {
+    resendMessage.value = 'Enter your email above first.'
+    return
+  }
+  resendLoading.value = true
+  try {
+    await auth.resendVerification(addr)
+    resendMessage.value = 'If that address is registered and not verified, we sent a new message.'
+  } catch (e) {
+    resendMessage.value =
+      e instanceof ApiError ? e.detail : e instanceof Error ? e.message : 'Could not resend'
+  } finally {
+    resendLoading.value = false
   }
 }
 </script>
@@ -68,6 +98,14 @@ async function onSubmit() {
           {{ loading ? 'Signing in…' : 'Sign in' }}
         </button>
       </form>
+
+      <div v-if="route.query.verify === '1' || (error && error.includes('verified'))" class="resend">
+        <p class="resend-title">Didn’t get the email?</p>
+        <button type="button" class="cc-btn cc-btn--ghost resend-btn" :disabled="resendLoading" @click="onResend">
+          {{ resendLoading ? 'Sending…' : 'Resend verification' }}
+        </button>
+        <p v-if="resendMessage" class="resend-msg">{{ resendMessage }}</p>
+      </div>
 
       <p class="foot">
         New here?
@@ -137,6 +175,28 @@ async function onSubmit() {
 
 .submit {
   margin-top: 0.25rem;
+}
+
+.resend {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.resend-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  color: var(--color-ink-muted);
+}
+
+.resend-btn {
+  width: 100%;
+}
+
+.resend-msg {
+  margin: 0.65rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--color-ink-muted);
 }
 
 .foot {

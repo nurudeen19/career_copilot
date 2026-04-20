@@ -1,9 +1,8 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
-import { apiFetch, setStoredToken, getStoredToken } from '@/api/client'
-import { decodeJwtSub } from '@/utils/jwt'
-import type { User } from '@/types/models'
+import { apiFetch, ApiError, setStoredToken, getStoredToken } from '@/api/client'
+import type { LoginResponse, User } from '@/types/models'
 
 const USER_KEY = 'career_copilot_user'
 
@@ -26,11 +25,32 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = u
   }
 
+  /** True when the user has a verified email and may use the app (dashboard, API). */
+  const canUseApp = computed(() => Boolean(token.value && user.value?.email_verified === true))
+
+  /** Legacy: token present (may still be pending verification). Prefer ``canUseApp`` for gating. */
   const isAuthenticated = computed(() => Boolean(token.value))
 
   function setToken(t: string | null) {
     token.value = t
     setStoredToken(t)
+  }
+
+  /**
+   * Refresh user from ``GET /auth/me`` when the session may be stale or missing ``email_verified``.
+   * Clears the session on 401/403 (e.g. unverified account or invalid token).
+   */
+  async function hydrateUserIfNeeded() {
+    if (!token.value) return
+    if (user.value?.email_verified === true) return
+    try {
+      const me = await apiFetch<User>('/auth/me')
+      persistUser(me)
+    } catch (e) {
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+        logout()
+      }
+    }
   }
 
   async function register(name: string, email: string, password: string): Promise<User> {
@@ -42,18 +62,20 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function login(email: string, password: string): Promise<void> {
-    const res = await apiFetch<{ access_token: string; token_type: string }>('/auth/login', {
+    const res = await apiFetch<LoginResponse>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
       skipAuth: true,
     })
     setToken(res.access_token)
-    const sub = decodeJwtSub(res.access_token)
-    persistUser({
-      id: sub ?? '',
-      name: email.split('@')[0] ?? 'You',
-      email: email.toLowerCase().trim(),
-      created_at: new Date().toISOString(),
+    persistUser(res.user)
+  }
+
+  async function resendVerification(email: string): Promise<void> {
+    await apiFetch<{ detail: string }>('/auth/resend-verification', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+      skipAuth: true,
     })
   }
 
@@ -70,11 +92,14 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     user,
     isAuthenticated,
+    canUseApp,
     register,
     login,
     logout,
+    resendVerification,
     setToken,
     persistUser,
     loadUserFromStorage,
+    hydrateUserIfNeeded,
   }
 })

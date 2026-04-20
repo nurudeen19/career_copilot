@@ -122,7 +122,7 @@ def register_user(db: Session, name: str, email: str, password: str, settings: S
     return user
 
 
-def login_user(db: Session, email: str, password: str, settings: Settings) -> str:
+def login_user(db: Session, email: str, password: str, settings: Settings) -> tuple[str, User]:
     normalized = email.lower().strip()
     user = db.scalar(select(User).where(User.email == normalized))
     if user is None or not _verify_password(password, user.hashed_password):
@@ -132,7 +132,7 @@ def login_user(db: Session, email: str, password: str, settings: Settings) -> st
             status_code=403,
             detail="Email not verified. Check your inbox or request a new verification link.",
         )
-    return _create_access_token(user.id, settings)
+    return _create_access_token(user.id, settings), user
 
 
 def verify_email_with_token(db: Session, user_id: uuid.UUID, token: str, settings: Settings) -> None:

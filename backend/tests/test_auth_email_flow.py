@@ -51,13 +51,16 @@ def test_register_verify_then_login(
     user_id = m_uid.group(1)
     uuid.UUID(user_id)
 
-    assert client_no_auto_verify.post("/auth/login", json={"email": email, "password": "longpass-1"}).status_code == 403
+    blocked = client_no_auto_verify.post("/auth/login", json={"email": email, "password": "longpass-1"})
+    assert blocked.status_code == 403
+    assert "verified" in blocked.json()["detail"].lower()
 
     rv = client_no_auto_verify.get(f"/auth/verify-email?token={token}&user_id={user_id}")
     assert rv.status_code == 200
 
     r2 = client_no_auto_verify.post("/auth/login", json={"email": email, "password": "longpass-1"})
     assert r2.status_code == 200
+    assert r2.json()["user"]["email_verified"] is True
 
 
 def test_forgot_reset_password(
@@ -101,4 +104,6 @@ def test_forgot_reset_password(
     assert rp.status_code == 200
 
     assert client_no_auto_verify.post("/auth/login", json={"email": email, "password": "original-1"}).status_code == 401
-    assert client_no_auto_verify.post("/auth/login", json={"email": email, "password": "replaced-22"}).status_code == 200
+    ok_login = client_no_auto_verify.post("/auth/login", json={"email": email, "password": "replaced-22"})
+    assert ok_login.status_code == 200
+    assert ok_login.json()["user"]["email_verified"] is True

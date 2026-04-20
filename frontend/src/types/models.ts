@@ -4,6 +4,14 @@ export interface User {
   name: string
   email: string
   created_at: string
+  email_verified: boolean
+}
+
+/** Login JSON from ``POST /auth/login``. */
+export interface LoginResponse {
+  access_token: string
+  token_type: string
+  user: User
 }
 
 /** Mirrors backend ``ProfileResponse`` / ``ProfileUpdate``. */

@@ -18,10 +18,15 @@ async function onSubmit() {
   error.value = null
   loading.value = true
   try {
-    await auth.register(name.value, email.value, password.value)
+    const created = await auth.register(name.value, email.value, password.value)
     await router.push({
       name: 'signin',
-      query: { registered: '1', email: email.value, name: name.value },
+      query: {
+        registered: '1',
+        email: email.value,
+        name: name.value,
+        ...(created.email_verified ? {} : { verify: '1' }),
+      },
     })
   } catch (e) {
     error.value = e instanceof ApiError ? e.detail : e instanceof Error ? e.message : 'Could not register'

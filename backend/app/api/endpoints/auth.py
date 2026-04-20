@@ -7,8 +7,10 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_current_user
 from app.config.settings import Settings, get_settings
 from app.db.session import get_db
+from app.models.user import User
 from app.schema.auth import (
     EmailRequest,
     LoginRequest,
@@ -45,8 +47,28 @@ def login(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> TokenResponse:
-    token = auth_service.login_user(db, body.email, body.password, settings)
-    return TokenResponse(access_token=token)
+    token, user = auth_service.login_user(db, body.email, body.password, settings)
+    return TokenResponse(
+        access_token=token,
+        user=UserResponse(
+            id=user.id,
+            name=user.name,
+            email=user.email,
+            created_at=user.created_at,
+            email_verified=user.email_verified_at is not None,
+        ),
+    )
+
+
+@router.get("/me", response_model=UserResponse)
+def read_current_user(user: User = Depends(get_current_user)) -> UserResponse:
+    return UserResponse(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        created_at=user.created_at,
+        email_verified=user.email_verified_at is not None,
+    )
 
 
 @router.get("/verify-email", response_model=MessageResponse)

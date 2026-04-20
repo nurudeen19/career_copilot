@@ -32,12 +32,18 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const auth = useAuthStore()
-  if (to.meta.requiresAuth && !auth.isAuthenticated) {
+
+  if (auth.token && (auth.user === null || auth.user.email_verified !== true)) {
+    await auth.hydrateUserIfNeeded()
+  }
+
+  if (to.meta.requiresAuth && !auth.canUseApp) {
     return { name: 'signin', query: { next: to.fullPath } }
   }
-  if ((to.name === 'signin' || to.name === 'signup') && auth.isAuthenticated) {
+
+  if ((to.name === 'signin' || to.name === 'signup') && auth.canUseApp) {
     return { name: 'dashboard' }
   }
   return true

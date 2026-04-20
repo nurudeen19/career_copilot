@@ -33,8 +33,15 @@ def test_register_login_and_profile(client) -> None:
 
     r2 = client.post("/auth/login", json={"email": email, "password": "securepass1"})
     assert r2.status_code == 200
-    token = r2.json()["access_token"]
-    assert r2.json()["token_type"] == "bearer"
+    body = r2.json()
+    token = body["access_token"]
+    assert body["token_type"] == "bearer"
+    assert body["user"]["email"] == email
+    assert body["user"]["email_verified"] is True
+
+    r_me = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert r_me.status_code == 200
+    assert r_me.json()["email_verified"] is True
 
     r3 = client.get("/profile", headers={"Authorization": f"Bearer {token}"})
     assert r3.status_code == 200
