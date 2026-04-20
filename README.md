@@ -19,6 +19,16 @@ python -m app.main
 
 Copy `backend/.env.example` to `backend/.env` when you wire APIs.
 
+### Backend tests
+
+```
+cd backend
+uv sync --extra test
+uv run pytest tests/ -q
+```
+
+Tests use a temporary SQLite file, a FastAPI app **without** the production lifespan (no Hugging Face prompt guard load), and stubbed password hashing for stable bcrypt/passlib behaviour across environments.
+
 ## Frontend
 
 ```
