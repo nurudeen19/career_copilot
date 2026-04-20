@@ -320,6 +320,7 @@ dependencies = [
     { name = "langgraph-checkpoint-postgres" },
     { name = "langgraph-checkpoint-sqlite" },
     { name = "langsmith" },
+    { name = "mailtrap" },
     { name = "passlib", extra = ["bcrypt"] },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
@@ -354,6 +355,7 @@ requires-dist = [
     { name = "langgraph-checkpoint-postgres", specifier = ">=2.0" },
     { name = "langgraph-checkpoint-sqlite", specifier = ">=3.0.3" },
     { name = "langsmith", specifier = ">=0.3" },
+    { name = "mailtrap", specifier = ">=2.5.0" },
     { name = "passlib", extras = ["bcrypt"], specifier = ">=1.7" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "pydantic", specifier = ">=2.7" },
@@ -1539,6 +1541,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/2f/b4/a0b4a501bee6b8a741ce29f8c48155b132118483cddc6f9247735ddb38fa/langsmith-0.7.32.tar.gz", hash = "sha256:b59b8e106d0e4c4842e158229296086e2aa7c561e3f602acda73d3ad0062e915", size = 1184518, upload-time = "2026-04-15T23:42:41.885Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/62/bc/148f98ac7dad73ac5e1b1c985290079cfeeb9ba13d760a24f25002beb2c9/langsmith-0.7.32-py3-none-any.whl", hash = "sha256:e1fde928990c4c52f47dc5132708cec674355d9101723d564183e965f383bf5f", size = 378272, upload-time = "2026-04-15T23:42:39.905Z" },
+]
+
+[[package]]
+name = "mailtrap"
+version = "2.5.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b3/8c/9049a6baffc90d348349539374891d9140e745a5a856abaf817b04da45c0/mailtrap-2.5.0.tar.gz", hash = "sha256:ae2de07c563bbae9b51afda47e377b05b3d141f40206144233e781e555fdca2e", size = 28990, upload-time = "2026-03-31T07:18:34.698Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f1/4a/b756a4ad085ec79f72af0c70fb7a980051bdde3995d1c4ede223e56bd374/mailtrap-2.5.0-py3-none-any.whl", hash = "sha256:f317b9a03450e4bf74d4086fa568ddd49e42a6315f2a79e8c8a88f83749bf75c", size = 41889, upload-time = "2026-03-31T07:18:33.718Z" },
 ]
 
 [[package]]

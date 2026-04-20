@@ -33,6 +33,7 @@ dependencies = [
     "transformers>=4.51",
     "torch>=2.6",
     "tenacity>=9.0",
+    "mailtrap>=2.5.0",
 ]
 
 [project.optional-dependencies]

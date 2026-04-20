@@ -36,6 +36,26 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24 * 7
 
+    public_app_base_url: str = Field(
+        default="http://127.0.0.1:8000",
+        description="Public API base URL (no trailing slash) for auth links in outbound email.",
+    )
+
+    mailtrap_api_token: str | None = Field(
+        default=None,
+        description="Mailtrap Sending API token (Bearer) for live transactional delivery.",
+    )
+    mail_from_email: str = Field(
+        default="noreply@example.com",
+        description="From address for transactional email (must be allowed in Mailtrap / your domain).",
+    )
+    mail_from_name: str = Field(default="Career Copilot", description="Display name for the From header.")
+
+    auth_dev_auto_verify_email: bool = Field(
+        default=False,
+        description="If true, skip Mailtrap on register and mark email verified (tests/local only).",
+    )
+
     openai_api_key: str | None = None
     groq_api_key: str | None = None
     openrouter_api_key: str | None = None

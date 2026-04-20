@@ -28,6 +28,21 @@ class User(Base):
         nullable=False,
     )
 
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    email_verification_token_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    email_verification_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    password_reset_token_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    password_reset_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     profile: Mapped["UserProfile | None"] = relationship(
         "UserProfile",
         back_populates="user",

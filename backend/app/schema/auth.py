@@ -24,8 +24,23 @@ class UserResponse(BaseModel):
     name: str
     email: str
     created_at: datetime
+    email_verified: bool = False
 
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class EmailRequest(BaseModel):
+    email: EmailStr
+
+
+class MessageResponse(BaseModel):
+    detail: str
+
+
+class ResetPasswordRequest(BaseModel):
+    user_id: uuid.UUID
+    token: str = Field(min_length=10, max_length=256)
+    password: str = Field(min_length=8, max_length=128)

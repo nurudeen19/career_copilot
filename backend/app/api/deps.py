@@ -37,4 +37,9 @@ def get_current_user(
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
+    if user.email_verified_at is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Email not verified. Complete verification before using the API.",
+        )
     return user
