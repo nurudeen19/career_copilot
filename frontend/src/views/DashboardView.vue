@@ -44,31 +44,39 @@ onMounted(async () => {
 
 <template>
   <div class="dash">
-    <header class="top cc-container">
-      <div class="brand">
-        <RouterLink to="/" class="logo cc-display">Career Copilot</RouterLink>
-        <span class="hi">Hi, {{ displayName }}</span>
-      </div>
-      <div class="actions">
-        <span v-if="!profile.complete" class="pill">Profile incomplete</span>
-        <button type="button" class="cc-btn cc-btn--ghost" @click="openProfile">Edit profile</button>
-        <button type="button" class="cc-btn cc-btn--ghost" @click="logout">Sign out</button>
+    <header class="top">
+      <div class="top-inner cc-container">
+        <div class="brand">
+          <RouterLink to="/" class="logo cc-display">Career Copilot</RouterLink>
+          <span class="hi">Hi, {{ displayName }}</span>
+        </div>
+        <div class="actions">
+          <span v-if="!profile.complete" class="pill">Profile incomplete</span>
+          <button type="button" class="cc-btn cc-btn--ghost" @click="openProfile">Edit profile</button>
+          <button type="button" class="cc-btn cc-btn--ghost" @click="logout">Sign out</button>
+        </div>
       </div>
     </header>
 
-    <main class="main cc-container">
-      <aside class="aside">
-        <p class="aside-title cc-display">Today</p>
-        <p class="aside-copy">
-          Ask about transitions, compensation signals, skill gaps, or how to frame your story — we’ll keep the thread
-          here.
-        </p>
-        <p v-if="!profile.complete" class="aside-note">
-          We’ll ask for your role, goal, and location before the first real exchange — it keeps guidance grounded.
-        </p>
-      </aside>
-      <ChatPanel class="chat-wrap" :profile-complete="profile.complete" @need-profile="onNeedProfile" />
-    </main>
+    <div class="body">
+      <div class="body-inner cc-container">
+        <aside class="insight">
+          <p class="insight-kicker">Today</p>
+          <p class="insight-lead cc-display">One calm place to think through your next move.</p>
+          <p class="insight-copy">
+            Ask about transitions, compensation signals, skill gaps, or how to frame your story — we keep the thread
+            here so you can iterate without losing context.
+          </p>
+          <p v-if="!profile.complete" class="insight-note">
+            We’ll ask for role, goal, and location before the first exchange so guidance stays grounded.
+          </p>
+        </aside>
+
+        <div class="chat-stage">
+          <ChatPanel :profile-complete="profile.complete" @need-profile="onNeedProfile" />
+        </div>
+      </div>
+    </div>
 
     <ProfileModal :open="modalOpen" @close="closeModal" @saved="onProfileSaved" />
   </div>
@@ -76,23 +84,32 @@ onMounted(async () => {
 
 <style scoped>
 .dash {
+  min-height: 100dvh;
   min-height: 100vh;
-  background: var(--color-canvas);
   display: flex;
   flex-direction: column;
+  background:
+    radial-gradient(120% 80% at 100% 0%, rgba(61, 107, 92, 0.08), transparent 55%),
+    radial-gradient(90% 60% at 0% 100%, rgba(198, 125, 78, 0.06), transparent 50%),
+    var(--color-canvas);
 }
 
 .top {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+}
+
+.top-inner {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding-top: 1.25rem;
+  padding-top: 1rem;
   padding-bottom: 1rem;
-  border-bottom: 1px solid var(--color-border);
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(8px);
 }
 
 .brand {
@@ -102,7 +119,7 @@ onMounted(async () => {
 }
 
 .logo {
-  font-size: 1.2rem;
+  font-size: 1.15rem;
   color: var(--color-ink);
   text-decoration: none;
 }
@@ -126,53 +143,90 @@ onMounted(async () => {
 .pill {
   font-size: 0.75rem;
   font-weight: 600;
-  padding: 0.25rem 0.6rem;
+  padding: 0.28rem 0.65rem;
   border-radius: var(--radius-full);
-  background: rgba(198, 125, 78, 0.15);
+  background: rgba(198, 125, 78, 0.14);
   color: #6b442a;
 }
 
-.main {
+.body {
   flex: 1;
-  display: grid;
-  gap: 1.5rem;
-  padding-top: 1.5rem;
-  padding-bottom: 2rem;
-  grid-template-columns: 1fr;
-  align-items: start;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.body-inner {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding-top: 1rem;
+  padding-bottom: 0;
 }
 
 @media (min-width: 900px) {
-  .main {
-    grid-template-columns: minmax(200px, 260px) 1fr;
+  .body-inner {
+    flex-direction: row;
+    align-items: stretch;
+    gap: 1.5rem;
+    padding-top: 1.25rem;
   }
 }
 
-.aside {
-  padding: 0.25rem 0;
+.insight {
+  flex-shrink: 0;
+  padding: 0.5rem 0 0;
+  max-width: 32rem;
 }
 
-.aside-title {
-  font-size: 1.1rem;
-  margin-bottom: 0.5rem;
+@media (min-width: 900px) {
+  .insight {
+    width: min(280px, 32%);
+    padding-top: 0.35rem;
+  }
 }
 
-.aside-copy,
-.aside-note {
+.insight-kicker {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+.insight-lead {
+  margin: 0 0 0.6rem;
+  font-size: 1.35rem;
+  line-height: 1.25;
+  color: var(--color-ink);
+}
+
+.insight-copy {
+  margin: 0 0 0.85rem;
   font-size: 0.9rem;
   color: var(--color-ink-muted);
-  line-height: 1.55;
-  margin: 0 0 0.75rem;
+  line-height: 1.6;
 }
 
-.aside-note {
-  padding: 0.75rem;
+.insight-note {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
   border-radius: var(--radius-md);
-  background: rgba(61, 107, 92, 0.08);
+  background: rgba(61, 107, 92, 0.09);
   color: var(--color-accent-hover);
+  border: 1px solid rgba(61, 107, 92, 0.12);
 }
 
-.chat-wrap {
+.chat-stage {
+  flex: 1;
+  min-height: 0;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 </style>

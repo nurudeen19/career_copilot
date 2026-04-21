@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 
 import {
   streamWorkflow,
@@ -7,7 +7,7 @@ import {
   extractValidationError,
 } from '@/composables/useWorkflowStream'
 
-export type ChatMessage = { role: 'user' | 'assistant'; content: string }
+export type ChatMessage = { id: string; role: 'user' | 'assistant'; content: string }
 
 const props = defineProps<{
   profileComplete: boolean
@@ -17,29 +17,119 @@ const emit = defineEmits<{
   'need-profile': []
 }>()
 
-const messages = ref<ChatMessage[]>([
-  {
-    role: 'assistant',
-    content:
-      "Hello — I’m here to help you think through your next career move. When you’re ready, share what’s on your mind. " +
-      "If you haven’t filled in your profile yet, we’ll gently ask for a few details so our guidance stays personal.",
-  },
-])
+const composerRef = ref<HTMLTextAreaElement | null>(null)
+const scrollRef = ref<HTMLElement | null>(null)
 
+function newMessageId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `m_${Date.now()}_${Math.random().toString(16).slice(2)}`
+}
+
+const WELCOME_TEXT =
+  "Hello — I’m here to help you think through your next career move. When you’re ready, share what’s on your mind. " +
+  "If you haven’t filled in your profile yet, we’ll gently ask for a few details so our guidance stays personal."
+
+function createWelcomeMessages(): ChatMessage[] {
+  return [{ id: newMessageId(), role: 'assistant', content: WELCOME_TEXT }]
+}
+
+const messages = ref<ChatMessage[]>(createWelcomeMessages())
 const input = ref('')
 const streaming = ref(false)
 const threadId = ref<string | null>(null)
 const error = ref<string | null>(null)
 
+/** Legacy: thread id only (still updated for compatibility). */
 const THREAD_KEY = 'career_copilot_thread_id'
+/** Full chat UI state: survives same-tab refresh (sessionStorage). */
+const CHAT_STATE_KEY = 'career_copilot_chat_state_v1'
 
-function loadThread() {
-  threadId.value = sessionStorage.getItem(THREAD_KEY)
+type StoredChat = { v?: number; thread_id?: string | null; messages?: unknown[] }
+
+function loadPersistedState() {
+  const legacyTid = sessionStorage.getItem(THREAD_KEY)
+  if (legacyTid) threadId.value = legacyTid
+
+  const raw = sessionStorage.getItem(CHAT_STATE_KEY)
+  if (!raw) {
+    messages.value = createWelcomeMessages()
+    return
+  }
+  try {
+    const o = JSON.parse(raw) as StoredChat
+    if (typeof o.thread_id === 'string' && o.thread_id.trim()) {
+      threadId.value = o.thread_id.trim()
+      sessionStorage.setItem(THREAD_KEY, threadId.value)
+    }
+    if (Array.isArray(o.messages) && o.messages.length > 0) {
+      const restored: ChatMessage[] = []
+      for (const row of o.messages) {
+        if (!row || typeof row !== 'object') continue
+        const r = row as Record<string, unknown>
+        const role = r.role
+        const content = r.content
+        const id = typeof r.id === 'string' && r.id ? r.id : newMessageId()
+        if (role !== 'user' && role !== 'assistant') continue
+        if (typeof content !== 'string' || !content.trim()) continue
+        restored.push({ id, role, content: content.trim() })
+      }
+      if (restored.length > 0) {
+        messages.value = restored
+        return
+      }
+    }
+  } catch {
+    /* ignore corrupt storage */
+  }
+  messages.value = createWelcomeMessages()
 }
 
-function saveThread(id: string) {
-  threadId.value = id
-  sessionStorage.setItem(THREAD_KEY, id)
+function clearConversation() {
+  if (streaming.value) return
+  try {
+    sessionStorage.removeItem(CHAT_STATE_KEY)
+    sessionStorage.removeItem(THREAD_KEY)
+  } catch {
+    /* ignore */
+  }
+  threadId.value = null
+  error.value = null
+  input.value = ''
+  messages.value = createWelcomeMessages()
+  void scrollToLatest()
+  focusComposer()
+}
+
+function persistState() {
+  try {
+    sessionStorage.setItem(
+      CHAT_STATE_KEY,
+      JSON.stringify({
+        v: 1,
+        thread_id: threadId.value,
+        messages: messages.value,
+      }),
+    )
+    if (threadId.value) sessionStorage.setItem(THREAD_KEY, threadId.value)
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+async function scrollToLatest() {
+  await nextTick()
+  const el = scrollRef.value
+  if (!el) return
+  el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+}
+
+function focusComposer() {
+  void nextTick(() => {
+    const el = composerRef.value
+    if (!el || el.disabled) return
+    el.focus()
+    const len = el.value.length
+    el.setSelectionRange(len, len)
+  })
 }
 
 watch(
@@ -49,7 +139,18 @@ watch(
   },
 )
 
-loadThread()
+watch(
+  messages,
+  () => {
+    persistState()
+    void scrollToLatest()
+  },
+  { deep: true },
+)
+watch(threadId, persistState)
+
+loadPersistedState()
+void scrollToLatest()
 
 async function send() {
   const text = input.value.trim()
@@ -60,9 +161,10 @@ async function send() {
   }
 
   error.value = null
-  messages.value.push({ role: 'user', content: text })
+  messages.value.push({ id: newMessageId(), role: 'user', content: text })
   input.value = ''
   streaming.value = true
+  await scrollToLatest()
 
   let draft = ''
   let sawChunk = false
@@ -89,30 +191,43 @@ async function send() {
           if (t) draft = t
         }
       } else if (ev.kind === 'done') {
-        saveThread(ev.thread_id)
+        if (ev.thread_id) {
+          threadId.value = ev.thread_id
+          sessionStorage.setItem(THREAD_KEY, ev.thread_id)
+        }
         if (draft.trim()) {
-          messages.value.push({ role: 'assistant', content: draft.trim() })
+          messages.value.push({ id: newMessageId(), role: 'assistant', content: draft.trim() })
         } else if (sawChunk) {
           messages.value.push({
+            id: newMessageId(),
             role: 'assistant',
             content: 'Here’s what I have so far — feel free to ask for more detail on any part.',
           })
         }
         draft = ''
+        await scrollToLatest()
       } else if (ev.kind === 'error') {
         error.value = ev.detail
         messages.value.push({
+          id: newMessageId(),
           role: 'assistant',
           content: `Something went wrong: ${ev.detail}`,
         })
+        await scrollToLatest()
       }
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Request failed'
     error.value = msg
-    messages.value.push({ role: 'assistant', content: `Couldn’t complete that request — ${msg}` })
+    messages.value.push({
+      id: newMessageId(),
+      role: 'assistant',
+      content: `Couldn’t complete that request — ${msg}`,
+    })
+    await scrollToLatest()
   } finally {
     streaming.value = false
+    focusComposer()
   }
 }
 
@@ -125,63 +240,111 @@ function onKeydown(e: KeyboardEvent) {
 </script>
 
 <template>
-  <section class="chat cc-card">
-    <header class="chat-head">
-      <h2 class="chat-title cc-display">Conversation</h2>
-      <p v-if="!profileComplete" class="hint">Complete your profile to send messages.</p>
-    </header>
-
-    <p v-if="error" class="banner" role="status">{{ error }}</p>
-
-    <div class="scroll">
-      <div v-for="(m, i) in messages" :key="i" class="row" :class="m.role">
-        <div class="bubble">
-          {{ m.content }}
+  <section class="chat" aria-label="Career conversation">
+    <div class="chat-surface">
+      <header class="chat-head">
+        <div class="chat-head-text">
+          <h2 class="chat-title cc-display">Conversation</h2>
+          <p v-if="!profileComplete" class="hint">Complete your profile to send messages.</p>
         </div>
-      </div>
-      <div v-if="streaming" class="row assistant">
-        <div class="bubble typing">
-          <span class="dot" />
-          <span class="dot" />
-          <span class="dot" />
+        <button
+          type="button"
+          class="new-chat cc-btn cc-btn--ghost"
+          :disabled="streaming"
+          title="Clear this chat and start a new thread on the server"
+          @click="clearConversation()"
+        >
+          New chat
+        </button>
+      </header>
+
+      <p v-if="error" class="banner" role="status">{{ error }}</p>
+
+      <div ref="scrollRef" class="scroll">
+        <div class="scroll-pad">
+          <div v-for="m in messages" :key="m.id" class="row" :class="m.role">
+            <div class="bubble">
+              {{ m.content }}
+            </div>
+          </div>
+          <div v-if="streaming" class="row assistant">
+            <div class="bubble typing">
+              <span class="dot" />
+              <span class="dot" />
+              <span class="dot" />
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
     <div class="composer">
-      <textarea
-        v-model="input"
-        class="cc-input composer-input"
-        rows="2"
-        :disabled="streaming"
-        placeholder="Share a question or context…"
-        aria-label="Message"
-        @keydown="onKeydown"
-      />
-      <button type="button" class="cc-btn cc-btn--primary send" :disabled="streaming" @click="send()">
-        Send
-      </button>
+      <div class="composer-inner">
+        <textarea
+          ref="composerRef"
+          v-model="input"
+          class="cc-input composer-input"
+          rows="2"
+          :disabled="streaming"
+          placeholder="Share a question or context…"
+          aria-label="Message"
+          @keydown="onKeydown"
+        />
+        <button type="button" class="cc-btn cc-btn--primary send" :disabled="streaming" @click="send()">
+          Send
+        </button>
+      </div>
     </div>
   </section>
 </template>
 
 <style scoped>
 .chat {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  min-height: 420px;
-  max-height: min(72vh, 720px);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-soft);
   overflow: hidden;
 }
 
+.chat-surface {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .chat-head {
-  padding: 1rem 1.25rem 0.5rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem 0.65rem;
   border-bottom: 1px solid var(--color-border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, var(--color-surface) 100%);
+}
+
+.chat-head-text {
+  flex: 1;
+  min-width: 0;
+  max-width: var(--max-readable);
+}
+
+.new-chat {
+  flex-shrink: 0;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
 }
 
 .chat-title {
-  font-size: 1.2rem;
-  margin: 0 0 0.25rem;
+  font-size: 1.1rem;
+  margin: 0 0 0.2rem;
 }
 
 .hint {
@@ -191,17 +354,25 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 .banner {
+  flex-shrink: 0;
   margin: 0;
-  padding: 0.5rem 1.25rem;
+  padding: 0.5rem 1rem;
   font-size: 0.875rem;
   background: rgba(198, 125, 78, 0.12);
   color: #7a4a2a;
+  border-bottom: 1px solid rgba(198, 125, 78, 0.15);
 }
 
 .scroll {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 1rem 1.25rem;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.scroll-pad {
+  padding: 1rem 1rem 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -220,7 +391,7 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 .bubble {
-  max-width: 85%;
+  max-width: min(85%, 36rem);
   padding: 0.75rem 1rem;
   border-radius: var(--radius-lg);
   font-size: 0.9375rem;
@@ -232,6 +403,7 @@ function onKeydown(e: KeyboardEvent) {
   background: var(--color-accent);
   color: #fff;
   border-bottom-right-radius: var(--radius-sm);
+  box-shadow: 0 4px 16px rgba(61, 107, 92, 0.25);
 }
 
 .row.assistant .bubble {
@@ -277,17 +449,27 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 .composer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--color-border-strong);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 -12px 32px rgba(26, 23, 20, 0.07);
+  padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom, 0px));
+}
+
+.composer-inner {
   display: flex;
   gap: 0.65rem;
   align-items: flex-end;
-  padding: 0.85rem 1.25rem 1.1rem;
-  border-top: 1px solid var(--color-border);
-  background: var(--color-surface);
+  max-width: var(--max-content);
+  margin: 0 auto;
 }
 
 .composer-input {
   flex: 1;
   resize: none;
+  min-height: 2.75rem;
+  max-height: 8rem;
 }
 
 .send {
