@@ -60,10 +60,6 @@ def _token_digest(settings: Settings, raw: str) -> str:
     ).hexdigest()
 
 
-def _public_base(settings: Settings) -> str:
-    return settings.public_app_base_url.rstrip("/")
-
-
 def _frontend_web_base(settings: Settings) -> str:
     return settings.frontend_app_base_url.rstrip("/")
 
@@ -247,26 +243,23 @@ def request_password_reset(db: Session, email: str, settings: Settings) -> None:
     user.password_reset_expires_at = datetime.now(timezone.utc) + RESET_TTL
     db.flush()
     try:
-        link = f"{_public_base(settings)}/auth/reset-password?token={raw}&user_id={user.id}"
+        link = f"{_frontend_web_base(settings)}/reset-password?token={raw}&user_id={user.id}"
         send_transactional_email(
             settings,
             to_email=user.email,
             subject="Reset your Career Copilot password",
             text=(
                 f"Hi {user.name},\n\n"
-                "We received a request to reset your password. Open this link (valid 2 hours):\n\n"
+                "We received a request to reset your password. Open this link (valid 2 hours) "
+                "and choose a new password on our site:\n\n"
                 f"{link}\n\n"
-                "Then submit your new password to POST /auth/reset-password with JSON body "
-                '{"token","user_id","password"} using the same token and user_id from this link.\n\n'
                 "If you did not request a reset, ignore this email.\n"
             ),
             html=(
                 f"<p>Hi {user.name},</p>"
-                "<p>We received a request to reset your password. Open the link below (valid 2 hours) "
-                "to choose a new password in your browser:</p>"
+                "<p>We received a request to reset your password. Use the link below (valid 2 hours) "
+                "to set a new password in your browser:</p>"
                 f'<p><a href="{link}">Reset password</a></p>'
-                "<p>You can also call <code>POST /auth/reset-password</code> with JSON "
-                "<code>token</code>, <code>user_id</code>, and <code>password</code>.</p>"
                 "<p>If you did not request a reset, ignore this email.</p>"
             ),
         )

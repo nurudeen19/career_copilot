@@ -1,17 +1,34 @@
-"""Environment-backed settings."""
+"""App settings from ``.env`` (composed nested blocks)."""
 
+from __future__ import annotations
+
+import os
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
-from pydantic import AliasChoices, Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.config.agents import AgentsConfig
+from app.config.prompt_guard_config import PromptGuardSettings
+from app.config.rate_limits import RateLimitsSettings
+from app.config.workflow import WorkflowSettings
 
 
 def _default_log_file_dir() -> str:
-    """``backend/logs`` regardless of process cwd (settings lives under ``app/config``)."""
     return str(Path(__file__).resolve().parents[2] / "logs")
+
+
+# Flat env names (provider defaults); merged into ``agents`` when nested key empty.
+_AGENT_API_KEY_ENV: tuple[tuple[str, str], ...] = (
+    ("OPENAI_API_KEY", "openai_api_key"),
+    ("GROQ_API_KEY", "groq_api_key"),
+    ("OPENROUTER_API_KEY", "openrouter_api_key"),
+    ("GOOGLE_API_KEY", "google_api_key"),
+    ("TAVILY_API_KEY", "tavily_api_key"),
+    ("BRAVE_SEARCH_API_KEY", "brave_search_api_key"),
+)
 
 
 class Settings(BaseSettings):
@@ -25,112 +42,61 @@ class Settings(BaseSettings):
 
     app_name: str = "Career Copilot"
     debug: bool = False
-    log_level: str = Field(
-        default="INFO",
-        description="Root log level: DEBUG, INFO, WARNING, ERROR (also applied to uvicorn loggers).",
-    )
-    log_file_enabled: bool = Field(
-        default=True,
-        description="If true, write rotating app.log under log_file_dir in addition to stderr.",
-    )
-    log_file_dir: str = Field(
-        default_factory=_default_log_file_dir,
-        description="Directory for app.log (created if missing). Set to /logs or /var/log/... in production.",
-    )
+    log_level: str = Field(default="INFO")
+    log_file_enabled: bool = Field(default=True)
+    log_file_dir: str = Field(default_factory=_default_log_file_dir)
     cors_allow_origins: str = Field(
         default="http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173",
-        description="Comma-separated origins for browser clients; use * to allow any (no credentials).",
     )
 
-    database_url: str | None = Field(
-        default=None,
-        description="SQLAlchemy URL, e.g. postgresql+psycopg://user:pass@localhost:5432/career_copilot",
-    )
+    database_url: str | None = None
     jwt_secret: str = Field(default="change-me", min_length=8)
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24 * 7
+    frontend_app_base_url: str = Field(default="http://localhost:5173")
 
-    public_app_base_url: str = Field(
-        default="http://127.0.0.1:8000",
-        description="Public API base URL (no trailing slash). Used for password-reset links to the backend HTML form.",
-    )
-    frontend_app_base_url: str = Field(
-        default="http://127.0.0.1:5173",
-        description="SPA origin (no trailing slash). Email verification links open this URL; the SPA POSTs to the API.",
-    )
+    mailtrap_api_token: str | None = None
+    mail_from_email: str = Field(default="noreply@example.com")
+    mail_from_name: str = Field(default="Career Copilot")
+    auth_dev_auto_verify_email: bool = False
 
-    mailtrap_api_token: str | None = Field(
-        default=None,
-        description="Mailtrap Sending API token (Bearer) for live transactional delivery.",
-    )
-    mail_from_email: str = Field(
-        default="noreply@example.com",
-        description="From address for transactional email (must be allowed in Mailtrap / your domain).",
-    )
-    mail_from_name: str = Field(default="Career Copilot", description="Display name for the From header.")
+    rate_limits: RateLimitsSettings = Field(default_factory=RateLimitsSettings)
 
-    auth_dev_auto_verify_email: bool = Field(
-        default=False,
-        description="If true, skip Mailtrap on register and mark email verified (tests/local only).",
-    )
+    langchain_tracing_v2: bool = False
+    langchain_api_key: str | None = None
+    langchain_project: str = Field(default="career-copilot")
 
-    rate_limit_enabled: bool = Field(
-        default=True,
-        description="When false, SlowAPI limits are effectively disabled (very high ceilings).",
-    )
-    rate_limit_login: str = Field(default="20/minute", description="Limit string for POST /auth/login.")
-    rate_limit_register: str = Field(default="10/minute", description="Limit for POST /auth/register.")
-    rate_limit_auth_email: str = Field(
-        default="8/minute",
-        description="Limit for POST /auth/resend-verification and /auth/forgot-password.",
-    )
-    rate_limit_verify_email: str = Field(default="45/minute", description="Limit for POST /auth/verify-email.")
-    rate_limit_reset_password: str = Field(
-        default="15/minute",
-        description="Limit for POST /auth/reset-password and GET reset form.",
-    )
-    rate_limit_profile: str = Field(default="120/minute", description="Limit for GET/PATCH /profile.")
-    rate_limit_workflow_stream: str = Field(default="24/minute", description="Limit for POST /workflow/stream.")
-    rate_limit_health: str = Field(default="120/minute", description="Limit for GET /health.")
-
-    openai_api_key: str | None = None
-    groq_api_key: str | None = None
-    openrouter_api_key: str | None = None
-    google_api_key: str | None = None
-    tavily_api_key: str | None = None
-    brave_search_api_key: str | None = None
-
-    # LangSmith / LangChain tracing (optional)
-    langchain_tracing_v2: bool = Field(default=False, description="Set LANGCHAIN_TRACING_V2 for LangSmith runs.")
-    langchain_api_key: str | None = Field(
-        default=None,
-        description="LangSmith API key; copied to LANGCHAIN_API_KEY at startup (langsmith also accepts LANGSMITH_API_KEY in the process env).",
-    )
-    langchain_project: str | None = Field(default="career-copilot", description="LANGCHAIN_PROJECT for traces.")
-
-    max_user_input_chars: int = 1_000
-    max_user_estimated_tokens: int = 800
-    graph_checkpoint_sqlite_path: str = ".data/langgraph_checkpoints.sqlite"
-
-    huggingface_token: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices(
-            "HF_TOKEN",
-            "HUGGING_FACE_HUB_TOKEN",
-            "HUGGINGFACE_TOKEN",
-        ),
-        description="Hugging Face token (Llama Prompt Guard 2). Accepts HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or HUGGINGFACE_TOKEN.",
-    )
-    prompt_guard_model_id: str = Field(
-        default="meta-llama/Llama-Prompt-Guard-2-86M",
-        description="HF model id for user-input prompt-injection classification.",
-    )
-    prompt_guard_device: int = Field(
-        default=-1,
-        description="Transformers pipeline device: -1 CPU, 0+ CUDA index.",
-    )
-
+    workflow: WorkflowSettings = Field(default_factory=WorkflowSettings)
+    prompt_guard: PromptGuardSettings = Field(default_factory=PromptGuardSettings)
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _merge_flat_env_into_nested(cls, data: Any) -> Any:
+        """HF token + LLM/search keys: allow flat env names (not only nested)."""
+        if not isinstance(data, dict):
+            return data
+        out = dict(data)
+
+        pg = dict(out.get("prompt_guard") or {})
+        if not str(pg.get("huggingface_token") or "").strip():
+            for key in ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "HUGGINGFACE_TOKEN"):
+                v = out.get(key) or os.environ.get(key)
+                if v:
+                    pg["huggingface_token"] = v
+                    break
+        if pg:
+            out["prompt_guard"] = {**(out.get("prompt_guard") or {}), **pg}
+
+        ag = dict(out.get("agents") or {})
+        for env_name, field in _AGENT_API_KEY_ENV:
+            if not str(ag.get(field) or "").strip():
+                v = out.get(env_name) or os.environ.get(env_name)
+                if v:
+                    ag[field] = v
+        out["agents"] = {**(out.get("agents") or {}), **ag}
+
+        return out
 
 
 @lru_cache

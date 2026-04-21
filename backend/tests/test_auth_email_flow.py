@@ -101,6 +101,7 @@ def test_forgot_reset_password(
     assert client_no_auto_verify.post("/auth/forgot-password", json={"email": email}).status_code == 200
     assert len(captured) == 1
     body = captured[0]["html"] or captured[0]["text"]
+    assert "/reset-password?" in body and "token=" in body and "user_id=" in body
     m_tok = re.search(r"token=([^&\s\"']+)", body)
     m_uid = re.search(r"user_id=([^&\s\"']+)", body)
     reset_tok, reset_uid = m_tok.group(1), m_uid.group(1)

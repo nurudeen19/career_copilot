@@ -30,6 +30,12 @@ const router = createRouter({
       meta: { guestLayout: true },
     },
     {
+      path: '/reset-password',
+      name: 'reset-password',
+      component: () => import('@/views/ResetPasswordView.vue'),
+      meta: { guestLayout: true },
+    },
+    {
       path: '/dashboard',
       name: 'dashboard',
       component: () => import('@/views/DashboardView.vue'),
@@ -49,7 +55,13 @@ router.beforeEach(async (to) => {
     return { name: 'signin', query: { next: to.fullPath } }
   }
 
-  if ((to.name === 'signin' || to.name === 'signup' || to.name === 'verify-email') && auth.canUseApp) {
+  if (
+    (to.name === 'signin' ||
+      to.name === 'signup' ||
+      to.name === 'verify-email' ||
+      to.name === 'reset-password') &&
+    auth.canUseApp
+  ) {
     return { name: 'dashboard' }
   }
   return true

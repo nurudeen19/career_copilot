@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from langchain_core.language_models.chat_models import BaseChatModel
 from langchain.agents import create_agent
 
 from app.config.agents import AgentName
@@ -32,14 +31,14 @@ class AgentRuntime:
 
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
-        self._chat_models: dict[AgentName, BaseChatModel] = {}
+        self._chat_models: dict[AgentName, Any] = {}
         self._agents: dict[tuple[Any, ...], Any] = {}
 
     @property
     def settings(self) -> Settings:
         return self._settings
 
-    def chat_model(self, name: AgentName) -> BaseChatModel:
+    def chat_model(self, name: AgentName) -> Any:
         if name not in self._chat_models:
             agent_llm_config = getattr(self._settings.agents, name)
             self._chat_models[name] = build_chat_model(agent_llm_config, self._settings)

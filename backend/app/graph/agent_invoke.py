@@ -20,8 +20,9 @@ def invoke_agent_with_resilience(
     fallback: Callable[[BaseException], dict[str, Any]],
 ) -> dict[str, Any]:
     """
-    Run ``call()`` (typically ``agent_graph.invoke``) with retries on transient errors.
+    Run ``call()`` (typically ``agent_graph.invoke``) with a short Tenacity retry on transient HTTP errors.
 
+    Primary model failures are handled first by LangChain ``with_fallbacks`` when configured on the chat model.
     After retries, **transient** errors are re-raised (outer graph / SSE layer may retry).
     **Non-transient** or exhausted-transient failures use ``fallback(exc)`` so the workflow continues.
     """

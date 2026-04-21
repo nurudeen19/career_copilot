@@ -18,9 +18,9 @@ def is_prompt_guard_loaded() -> bool:
 
 
 def _hf_token(settings: Settings) -> str | None:
-    # Primary: settings loads HF_TOKEN / HUGGING_FACE_HUB_TOKEN / HUGGINGFACE_TOKEN from .env or os.environ.
-    if settings.huggingface_token:
-        return settings.huggingface_token
+    t = settings.prompt_guard.huggingface_token
+    if t:
+        return t
     return os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or None
 
 
@@ -34,17 +34,17 @@ def setup_prompt_guard(settings: Settings) -> None:
     if not token:
         raise RuntimeError(
             "Prompt guard requires HF_TOKEN (or HUGGINGFACE_TOKEN / HUGGING_FACE_HUB_TOKEN) in .env or the process environment "
-            "to access meta-llama/Llama-Prompt-Guard-2-86M."
+            f"to access {settings.prompt_guard.model_id}."
         )
 
     from transformers import pipeline
 
     kwargs: dict[str, Any] = {
         "task": "text-classification",
-        "model": settings.prompt_guard_model_id,
+        "model": settings.prompt_guard.model_id,
         "truncation": True,
         "max_length": 512,
-        "device": settings.prompt_guard_device,
+        "device": settings.prompt_guard.device,
         "token": token,
     }
     _pipeline = pipeline(**kwargs)

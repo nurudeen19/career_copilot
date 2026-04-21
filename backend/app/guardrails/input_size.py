@@ -7,13 +7,13 @@ from app.config.settings import Settings
 
 def validate_input_size(text: str, settings: Settings) -> str | None:
     """Return a user-facing error string, or ``None`` if within limits."""
-    if len(text) > settings.max_user_input_chars:
+    if len(text) > settings.workflow.max_user_input_chars:
         return (
             f"Message is too long ({len(text)} characters). "
-            f"Please shorten to under {settings.max_user_input_chars} characters and try again."
+            f"Please shorten to under {settings.workflow.max_user_input_chars} characters and try again."
         )
     est_tokens = max(len(text) // 4, 1)
-    if est_tokens > settings.max_user_estimated_tokens:
+    if est_tokens > settings.workflow.max_user_estimated_tokens:
         return (
             "Message appears to exceed safe token limits for this service. "
             "Please shorten your question and try again."

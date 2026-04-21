@@ -61,11 +61,12 @@ def iter_workflow_sse(
     user: User,
     *,
     runtime: AgentRuntime | None = None,
-    max_stream_attempts: int = 3,
+    max_stream_attempts: int = 2,
 ) -> Iterator[str]:
     """
     Yield ``text/event-stream`` frames (sync). Each ``data:`` JSON has ``thread_id``, ``step``, ``patch``.
     Final frame: ``{"event": "done", "thread_id": ...}``; errors: ``{"event": "error", "detail": ...}``.
+    Retries only before any chunk is emitted (``max_stream_attempts`` defaults to 2).
     """
     rt = runtime or get_agent_runtime()
     tid = str(body.thread_id) if body.thread_id else str(uuid.uuid4())
@@ -137,7 +138,7 @@ async def aiter_workflow_sse(
     user: User,
     *,
     runtime: AgentRuntime | None = None,
-    max_stream_attempts: int = 3,
+    max_stream_attempts: int = 2,
 ) -> AsyncIterator[bytes]:
     """
     Async SSE: one background thread runs the sync LangGraph stream so ``ContextVar`` workflow

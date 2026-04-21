@@ -444,7 +444,7 @@ def stream_graph_updates(
 
 @retry(**WORKFLOW_RETRY)
 def invoke_career_graph(graph: Any, initial: dict[str, Any], cfg: dict[str, Any]) -> dict[str, Any]:
-    """Single graph ``invoke`` with Tenacity retries on transient provider / HTTP errors."""
+    """Single graph ``invoke`` with light Tenacity retries (after model fallbacks on each agent)."""
     return graph.invoke(initial, config=cfg)
 
 

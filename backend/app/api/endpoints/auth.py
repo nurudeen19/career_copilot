@@ -1,10 +1,6 @@
 """Registration, login, verification, and password reset endpoints."""
 
-import html
-import uuid
-
-from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -119,50 +115,6 @@ def resend_verification(
     return MessageResponse(
         detail="If that address is registered and not yet verified, a new message was sent.",
     )
-
-
-@router.get("/reset-password", response_class=HTMLResponse)
-@limiter.limit(limit_reset_password)
-def reset_password_form(
-    request: Request,
-    token: str = Query(min_length=10),
-    user_id: uuid.UUID = Query(alias="user_id"),
-) -> HTMLResponse:
-    """Minimal browser page to complete a reset (link from email)."""
-    _ = request.app
-    safe_t = html.escape(token, quote=True)
-    safe_uid = html.escape(str(user_id), quote=True)
-    page = f"""<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"/><title>Reset password</title></head>
-<body>
-  <h1>Reset password</h1>
-  <form id="reset-form">
-    <input type="hidden" id="user_id" value="{safe_uid}"/>
-    <input type="hidden" id="token" value="{safe_t}"/>
-    <p><label>New password <input type="password" id="password" minlength="8" required/></label></p>
-    <p><button type="submit">Update password</button></p>
-    <p id="msg"></p>
-  </form>
-  <script>
-    document.getElementById("reset-form").addEventListener("submit", async (e) => {{
-      e.preventDefault();
-      const body = {{
-        user_id: document.getElementById("user_id").value,
-        token: document.getElementById("token").value,
-        password: document.getElementById("password").value,
-      }};
-      const r = await fetch("/auth/reset-password", {{
-        method: "POST",
-        headers: {{ "Content-Type": "application/json" }},
-        body: JSON.stringify(body),
-      }});
-      const msg = document.getElementById("msg");
-      if (r.ok) {{ msg.textContent = "Password updated. You can close this page."; }}
-      else {{ msg.textContent = await r.text(); }}
-    }});
-  </script>
-</body></html>"""
-    return HTMLResponse(page)
 
 
 @router.post("/forgot-password", response_model=MessageResponse)

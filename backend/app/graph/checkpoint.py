@@ -42,7 +42,7 @@ def get_checkpointer(settings: Settings | None = None) -> Any:
 
     from langgraph.checkpoint.sqlite import SqliteSaver
 
-    path = Path(s.graph_checkpoint_sqlite_path)
+    path = Path(s.workflow.graph_checkpoint_sqlite_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     _sqlite_conn = sqlite3.connect(str(path), check_same_thread=False)
     _saver = SqliteSaver(_sqlite_conn)

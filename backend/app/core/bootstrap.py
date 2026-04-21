@@ -30,7 +30,7 @@ def init_app() -> None:
     _configure_langsmith_tracing()
     _log.info("init_app: configuring SQLAlchemy engine")
     configure_engine(settings.database_url)
-    _log.info("init_app: loading prompt guard (%s)", settings.prompt_guard_model_id)
+    _log.info("init_app: loading prompt guard (%s)", settings.prompt_guard.model_id)
     setup_guardrails(settings)
     _log.info("init_app: finished")
 

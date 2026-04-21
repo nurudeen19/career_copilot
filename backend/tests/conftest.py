@@ -52,7 +52,7 @@ def sqlite_database(monkeypatch: pytest.MonkeyPatch, tmp_path) -> str:
     monkeypatch.setenv("DATABASE_URL", url)
     monkeypatch.setenv("JWT_SECRET", "pytest-jwt-secret-at-least-eight-chars")
     monkeypatch.setenv("AUTH_DEV_AUTO_VERIFY_EMAIL", "true")
-    monkeypatch.setenv("RATE_LIMIT_ENABLED", "false")
+    monkeypatch.setenv("RATE_LIMITS__ENABLED", "false")
     get_settings.cache_clear()
     configure_engine(url)
     # Import models so tables register on Base.metadata

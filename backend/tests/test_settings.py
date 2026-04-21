@@ -16,7 +16,7 @@ def test_settings_defaults_for_optional_keys() -> None:
     assert s.app_name == "Career Copilot"
     assert s.database_url is None
     assert s.log_level.upper() == "INFO"
-    assert s.prompt_guard_model_id == "meta-llama/Llama-Prompt-Guard-2-86M"
+    assert s.prompt_guard.model_id == "meta-llama/Llama-Prompt-Guard-2-86M"
 
 
 def test_settings_jwt_secret_min_length() -> None:

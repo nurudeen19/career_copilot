@@ -1,4 +1,8 @@
-"""Transient-error detection and Tenacity defaults for graph invoke, streaming, and per-agent calls."""
+"""Transient-error detection and Tenacity defaults for graph invoke, streaming, and per-agent calls.
+
+LangChain ``with_fallbacks`` (see ``build_chat_model``) handles primary→backup model failures first.
+Tenacity here only covers remaining transient faults (HTTP timeouts, 429/5xx, etc.) with short retries.
+"""
 
 from __future__ import annotations
 
@@ -34,17 +38,17 @@ def is_transient_workflow_error(exc: BaseException) -> bool:
 
 
 WORKFLOW_RETRY = dict(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=0.5, min=0.5, max=8),
+    stop=stop_after_attempt(2),
+    wait=wait_exponential(multiplier=0.5, min=0.5, max=6),
     retry=retry_if_exception(is_transient_workflow_error),
     reraise=True,
     before_sleep=before_sleep_log(_log, logging.WARNING),
 )
 
-# Per-agent leaf retries (before degraded fallback). Slightly tighter max wait than whole-graph.
+# Per-agent invoke: one retry after LangChain fallbacks (if configured) exhaust.
 AGENT_INVOKE_POLICY = dict(
-    stop=stop_after_attempt(4),
-    wait=wait_exponential(multiplier=0.35, min=0.4, max=6),
+    stop=stop_after_attempt(2),
+    wait=wait_exponential(multiplier=0.4, min=0.5, max=5),
     retry=retry_if_exception(is_transient_workflow_error),
     reraise=True,
     before_sleep=before_sleep_log(_log, logging.INFO),

@@ -87,6 +87,18 @@ export const useAuthStore = defineStore('auth', () => {
     })
   }
 
+  async function resetPassword(
+    token: string,
+    userId: string,
+    password: string,
+  ): Promise<{ detail: string }> {
+    return apiFetch<{ detail: string }>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, user_id: userId, password }),
+      skipAuth: true,
+    })
+  }
+
   function logout() {
     sessionStorage.removeItem('career_copilot_thread_id')
     setToken(null)
@@ -106,6 +118,7 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     resendVerification,
     verifyEmail,
+    resetPassword,
     setToken,
     persistUser,
     loadUserFromStorage,

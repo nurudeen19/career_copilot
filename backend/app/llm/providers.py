@@ -1,8 +1,8 @@
-"""Map ``AgentLLMConfig.model_provider`` to a LangChain chat model (one function, no caches)."""
+"""Map ``AgentLLMConfig.model_provider`` to a LangChain chat model (optional ``with_fallbacks``)."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
 
@@ -22,8 +22,8 @@ def _require_key(label: str, value: str | None) -> str:
     return str(value).strip()
 
 
-def build_chat_model(agent_llm_config: AgentLLMConfig, settings: Settings) -> BaseChatModel:
-    """Build a ``BaseChatModel`` for the configured provider."""
+def _instantiate_chat_model(agent_llm_config: AgentLLMConfig, settings: Settings) -> BaseChatModel:
+    """Single provider/model instance (no fallback chain)."""
     provider = agent_llm_config.model_provider
 
     if provider == "openai":
@@ -33,7 +33,7 @@ def build_chat_model(agent_llm_config: AgentLLMConfig, settings: Settings) -> Ba
             model=agent_llm_config.model,
             temperature=agent_llm_config.temperature,
             max_tokens=agent_llm_config.max_tokens,
-            api_key=_require_key("OPENAI_API_KEY", settings.openai_api_key),
+            api_key=_require_key("OPENAI_API_KEY", settings.agents.openai_api_key),
         )
 
     if provider == "groq":
@@ -43,7 +43,7 @@ def build_chat_model(agent_llm_config: AgentLLMConfig, settings: Settings) -> Ba
             model=agent_llm_config.model,
             temperature=agent_llm_config.temperature,
             max_tokens=agent_llm_config.max_tokens,
-            api_key=_require_key("GROQ_API_KEY", settings.groq_api_key),
+            api_key=_require_key("GROQ_API_KEY", settings.agents.groq_api_key),
         )
 
     if provider == "openrouter":
@@ -53,7 +53,7 @@ def build_chat_model(agent_llm_config: AgentLLMConfig, settings: Settings) -> Ba
             model=agent_llm_config.model,
             temperature=agent_llm_config.temperature,
             max_tokens=agent_llm_config.max_tokens,
-            api_key=_require_key("OPENROUTER_API_KEY", settings.openrouter_api_key),
+            api_key=_require_key("OPENROUTER_API_KEY", settings.agents.openrouter_api_key),
             base_url=OPENROUTER_API_BASE,
         )
 
@@ -64,7 +64,33 @@ def build_chat_model(agent_llm_config: AgentLLMConfig, settings: Settings) -> Ba
             model=agent_llm_config.model,
             temperature=agent_llm_config.temperature,
             max_output_tokens=agent_llm_config.max_tokens,
-            google_api_key=_require_key("GOOGLE_API_KEY", settings.google_api_key),
+            google_api_key=_require_key("GOOGLE_API_KEY", settings.agents.google_api_key),
         )
 
     raise ValueError(f"Unsupported model_provider: {provider!r}")
+
+
+def build_chat_model(agent_llm_config: AgentLLMConfig, settings: Settings) -> Any:
+    """
+    Build a chat model for ``create_agent``.
+
+    When ``fallback_model`` and ``fallback_model_provider`` are set, wraps the primary
+    model with LangChain ``with_fallbacks`` so provider/model errors roll to the backup
+    before Tenacity sees a failure.
+    """
+    primary = _instantiate_chat_model(agent_llm_config, settings)
+    fb_model = (agent_llm_config.fallback_model or "").strip()
+    fb_prov = agent_llm_config.fallback_model_provider
+    if not fb_model or fb_prov is None:
+        return primary
+
+    fb_cfg = agent_llm_config.model_copy(
+        update={
+            "model": fb_model,
+            "model_provider": fb_prov,
+            "fallback_model": None,
+            "fallback_model_provider": None,
+        }
+    )
+    secondary = _instantiate_chat_model(fb_cfg, settings)
+    return primary.with_fallbacks([secondary])

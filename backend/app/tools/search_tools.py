@@ -190,7 +190,7 @@ def _brave_llm_context_to_response(query: str, data: dict[str, Any]) -> SearchTo
 @tool
 def tavily_web_search(query: str) -> str:
     """Search the web with Tavily (LangChain integration). Returns JSON: SearchToolResponse schema."""
-    key = get_settings().tavily_api_key
+    key = get_settings().agents.tavily_api_key
     q = (query or "").strip()
     if not key:
         return _empty_response("tavily", q, "Tavily is not configured: set TAVILY_API_KEY in the environment.")
@@ -219,7 +219,7 @@ def brave_web_search(query: str) -> str:
 
     Returns JSON: SearchToolResponse schema.
     """
-    key = get_settings().brave_search_api_key
+    key = get_settings().agents.brave_search_api_key
     q = (query or "").strip()
     if not key:
         return _empty_response("brave", q, "Brave Search is not configured: set BRAVE_SEARCH_API_KEY.")
