@@ -6,6 +6,7 @@ import os
 from app.config.settings import get_settings
 from app.core.logging_config import configure_logging
 from app.db.session import configure_engine, dispose_engine, ping
+from app.graph.checkpoint import dispose_checkpointer, get_checkpointer
 from app.guardrails import setup_guardrails, teardown_guardrails
 
 _log = logging.getLogger(__name__)
@@ -32,6 +33,8 @@ def init_app() -> None:
     configure_engine(settings.database_url)
     _log.info("init_app: loading prompt guard (%s)", settings.prompt_guard.model_id)
     setup_guardrails(settings)
+    _log.info("init_app: LangGraph checkpointer (Postgres migrations or SQLite file)")
+    get_checkpointer(settings)
     _log.info("init_app: finished")
 
 
@@ -46,8 +49,10 @@ def verify_database_connection() -> None:
 
 
 def shutdown_app() -> None:
-    """Release database connections and unload guardrail models."""
+    """Release database connections, checkpoint pool, and unload guardrail models."""
     _log.info("shutdown_app: unloading guardrails")
     teardown_guardrails()
+    _log.info("shutdown_app: disposing LangGraph checkpointer")
+    dispose_checkpointer()
     _log.info("shutdown_app: disposing database engine")
     dispose_engine()

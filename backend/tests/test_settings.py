@@ -35,3 +35,14 @@ def test_settings_database_url_from_env(monkeypatch: pytest.MonkeyPatch, tmp_pat
     monkeypatch.setenv("DATABASE_URL", url)
     s = Settings()
     assert s.database_url == url
+
+
+def test_openai_api_key_on_agents_mixin(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-root-test")
+    from app.config.settings import get_settings
+
+    get_settings.cache_clear()
+    s = Settings()
+    assert s.agents.openai_api_key == "sk-root-test"
+    assert s.openai_api_key == "sk-root-test"
+    get_settings.cache_clear()

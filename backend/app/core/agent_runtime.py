@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from langchain.agents import create_agent
+from langchain_core.language_models.chat_models import BaseChatModel
 
 from app.config.agents import AgentName
 from app.config.settings import Settings, get_settings
@@ -24,6 +25,24 @@ def _agent_cache_key(
     if isinstance(response_format, type):
         return (name, response_format, tool_names)
     return (name, id(response_format), tool_names)
+
+
+def _model_for_create_agent(model: Any, *, structured: bool) -> Any:
+    """``create_agent`` only auto-detects provider JSON schema on ``BaseChatModel`` (or a model id string).
+
+    ``with_fallbacks`` wraps the chat model in ``RunnableWithFallbacks``, which is not a
+    ``BaseChatModel``; LangChain then falls back to tool-style structured output and the
+    graph often ends without ``structured_response``. Use the primary runnable for
+    structured agents (resilience stays on the graph invoke path where applicable).
+    """
+    if not structured:
+        return model
+    if isinstance(model, BaseChatModel):
+        return model
+    inner = getattr(model, "runnable", None)
+    if isinstance(inner, BaseChatModel):
+        return inner
+    return model
 
 
 class AgentRuntime:
@@ -65,7 +84,11 @@ class AgentRuntime:
         if response_format is not None:
             kwargs["response_format"] = response_format
 
-        graph = create_agent(self.chat_model(name), **kwargs)
+        model = _model_for_create_agent(
+            self.chat_model(name),
+            structured=response_format is not None,
+        )
+        graph = create_agent(model, **kwargs)
         self._agents[key] = graph
         return graph
 

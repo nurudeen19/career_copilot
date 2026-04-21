@@ -1,4 +1,4 @@
-"""LLM provider keys + per-agent model config. Keys: ``OPENAI_API_KEY``, … or ``AGENTS__<role>__*``."""
+"""Agent LLM blocks, provider keys, and :class:`AgentsConfig` (mixed into ``Settings`` — no duplicate mapping)."""
 
 from typing import Literal
 
@@ -55,9 +55,9 @@ class AgentLLMConfig(BaseModel):
 
 
 class AgentsConfig(BaseModel):
-    """Provider keys and each agent's model block."""
+    """API keys + per-role ``PLANNER_*`` / ``RESEARCH_*`` env fields; role blocks are properties."""
 
-    model_config = ConfigDict(extra="ignore", frozen=True)
+    model_config = ConfigDict(extra="ignore")
 
     openai_api_key: str | None = None
     groq_api_key: str | None = None
@@ -66,9 +66,78 @@ class AgentsConfig(BaseModel):
     tavily_api_key: str | None = None
     brave_search_api_key: str | None = None
 
-    planner: AgentLLMConfig = Field(default_factory=AgentLLMConfig)
-    research: AgentLLMConfig = Field(default_factory=AgentLLMConfig)
-    analyst: AgentLLMConfig = Field(default_factory=AgentLLMConfig)
-    critic: AgentLLMConfig = Field(default_factory=AgentLLMConfig)
-    synthesizer: AgentLLMConfig = Field(default_factory=AgentLLMConfig)
-    feedback: AgentLLMConfig = Field(default_factory=AgentLLMConfig)
+    planner_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    planner_max_tokens: int = Field(default=4096, ge=1)
+    planner_model: str = Field(default="gpt-4o-mini")
+    planner_model_provider: ModelProvider = Field(default="openai")
+    planner_fallback_model: str | None = None
+    planner_fallback_model_provider: ModelProvider | None = None
+
+    research_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    research_max_tokens: int = Field(default=4096, ge=1)
+    research_model: str = Field(default="gpt-4o-mini")
+    research_model_provider: ModelProvider = Field(default="openai")
+    research_fallback_model: str | None = None
+    research_fallback_model_provider: ModelProvider | None = None
+
+    analyst_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    analyst_max_tokens: int = Field(default=4096, ge=1)
+    analyst_model: str = Field(default="gpt-4o-mini")
+    analyst_model_provider: ModelProvider = Field(default="openai")
+    analyst_fallback_model: str | None = None
+    analyst_fallback_model_provider: ModelProvider | None = None
+
+    critic_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    critic_max_tokens: int = Field(default=4096, ge=1)
+    critic_model: str = Field(default="gpt-4o-mini")
+    critic_model_provider: ModelProvider = Field(default="openai")
+    critic_fallback_model: str | None = None
+    critic_fallback_model_provider: ModelProvider | None = None
+
+    synthesizer_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    synthesizer_max_tokens: int = Field(default=4096, ge=1)
+    synthesizer_model: str = Field(default="gpt-4o-mini")
+    synthesizer_model_provider: ModelProvider = Field(default="openai")
+    synthesizer_fallback_model: str | None = None
+    synthesizer_fallback_model_provider: ModelProvider | None = None
+
+    feedback_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    feedback_max_tokens: int = Field(default=4096, ge=1)
+    feedback_model: str = Field(default="gpt-4o-mini")
+    feedback_model_provider: ModelProvider = Field(default="openai")
+    feedback_fallback_model: str | None = None
+    feedback_fallback_model_provider: ModelProvider | None = None
+
+    def _llm(self, role: AgentName) -> AgentLLMConfig:
+        return AgentLLMConfig(
+            temperature=getattr(self, f"{role}_temperature"),
+            max_tokens=getattr(self, f"{role}_max_tokens"),
+            model=getattr(self, f"{role}_model"),
+            model_provider=getattr(self, f"{role}_model_provider"),
+            fallback_model=getattr(self, f"{role}_fallback_model"),
+            fallback_model_provider=getattr(self, f"{role}_fallback_model_provider"),
+        )
+
+    @property
+    def planner(self) -> AgentLLMConfig:
+        return self._llm("planner")
+
+    @property
+    def research(self) -> AgentLLMConfig:
+        return self._llm("research")
+
+    @property
+    def analyst(self) -> AgentLLMConfig:
+        return self._llm("analyst")
+
+    @property
+    def critic(self) -> AgentLLMConfig:
+        return self._llm("critic")
+
+    @property
+    def synthesizer(self) -> AgentLLMConfig:
+        return self._llm("synthesizer")
+
+    @property
+    def feedback(self) -> AgentLLMConfig:
+        return self._llm("feedback")

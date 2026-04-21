@@ -1,4 +1,8 @@
-"""LangGraph checkpointer: Postgres when DATABASE_URL is set, else SQLite file."""
+"""LangGraph checkpointer: Postgres when DATABASE_URL is set, else SQLite file.
+
+Call :func:`get_checkpointer` during API startup (see ``init_app``) so migrations run
+before the first workflow request; the graph still calls ``get_checkpointer`` for the same singleton.
+"""
 
 from __future__ import annotations
 
@@ -20,8 +24,18 @@ def _normalize_postgres_conninfo(url: str) -> str:
     return url
 
 
+def _patch_langgraph_postgres_index_migrations() -> None:
+    """LangGraph uses ``CREATE INDEX CONCURRENTLY``; psycopg runs ``setup()`` in a transaction, which Postgres rejects."""
+    from langgraph.checkpoint.postgres import base as lg_pg_base
+
+    migs = lg_pg_base.MIGRATIONS
+    for i, sql in enumerate(migs):
+        if isinstance(sql, str) and "CONCURRENTLY" in sql:
+            migs[i] = sql.replace("CREATE INDEX CONCURRENTLY", "CREATE INDEX")
+
+
 def get_checkpointer(settings: Settings | None = None) -> Any:
-    """Return a process-wide checkpointer (creates tables / file on first use)."""
+    """Return the process-wide checkpointer, creating the pool and running ``setup()`` on first call."""
     global _pool, _sqlite_conn, _saver
     if _saver is not None:
         return _saver
@@ -31,6 +45,7 @@ def get_checkpointer(settings: Settings | None = None) -> Any:
         from langgraph.checkpoint.postgres import PostgresSaver
         from psycopg_pool import ConnectionPool
 
+        _patch_langgraph_postgres_index_migrations()
         _pool = ConnectionPool(
             conninfo=_normalize_postgres_conninfo(s.database_url),
             open=True,

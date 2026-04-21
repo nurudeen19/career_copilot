@@ -23,13 +23,34 @@ class PlannerAgentOutput(BaseModel):
     notes: str = Field(default="", description="Short planner commentary or caveats.")
     handoff: Literal["research", "user_clarify", "user_casual_redirect"] = Field(
         default="research",
-        description="research: enough to run market research; user_clarify: ask the user; "
-        "user_casual_redirect: off-topic — gently steer toward a career question.",
+        description="research only with a clear career topic; user_clarify when unclear; "
+        "user_casual_redirect for greetings, thanks, or non-career chat — steer toward a career question.",
     )
     assistant_message: str | None = Field(
         default=None,
         description="When handoff is not research, the user-facing reply (questions or redirect).",
     )
+
+    @model_validator(mode="after")
+    def coerce_research_without_career_topic(self) -> Self:
+        """Avoid sending empty goals into the research pipeline."""
+        if self.handoff != "research":
+            return self
+        if (
+            (self.target_role or "").strip()
+            or (self.current_state or "").strip()
+            or self.subtasks
+        ):
+            return self
+        return self.model_copy(
+            update={
+                "handoff": "user_clarify",
+                "assistant_message": (
+                    "What career move should we dig into? For example: switching roles, getting promoted, "
+                    "or breaking into a field—one sentence is enough to pull useful market research."
+                ),
+            }
+        )
 
     @model_validator(mode="after")
     def compose_assistant_message_from_planner_fields(self) -> Self:

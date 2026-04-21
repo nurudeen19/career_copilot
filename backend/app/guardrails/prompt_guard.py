@@ -16,24 +16,16 @@ def is_prompt_guard_loaded() -> bool:
     """True after ``setup_prompt_guard`` has completed successfully."""
     return _pipeline is not None
 
-
-def _hf_token(settings: Settings) -> str | None:
-    t = settings.prompt_guard.huggingface_token
-    if t:
-        return t
-    return os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or None
-
-
 def setup_prompt_guard(settings: Settings) -> None:
     """Download/load the classifier and keep it in memory. Call from ``init_app``."""
     global _pipeline
     if _pipeline is not None:
         return
 
-    token = _hf_token(settings)
+    token = settings.hf_token
     if not token:
         raise RuntimeError(
-            "Prompt guard requires HF_TOKEN (or HUGGINGFACE_TOKEN / HUGGING_FACE_HUB_TOKEN) in .env or the process environment "
+            "Prompt guard needs a Hugging Face token: set HF_TOKEN (or HUGGING_FACE_HUB_TOKEN) "
             f"to access {settings.prompt_guard.model_id}."
         )
 
