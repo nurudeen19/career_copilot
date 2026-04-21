@@ -7,6 +7,7 @@ import uuid
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from app.config.settings import get_settings
 from app.core.bootstrap import init_app
 from app.graph import build_graph, run_graph
 from app.graph.career_graph import invoke_career_graph
@@ -43,6 +44,7 @@ def apply_feedback(ctx: dict, user_feedback: str) -> dict:
             "plan": ctx.get("plan") or {},
         },
         {"configurable": {"thread_id": tid}},
+        settings=get_settings(),
     )
     ctx.update(
         {

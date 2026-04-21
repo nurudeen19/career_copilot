@@ -1,8 +1,8 @@
-"""HTTP app, database, mail, logging, LangSmith — env on the merged :class:`~app.config.settings.Settings`."""
+"""HTTP app, database, mail, logging, LangSmith — fields mixed into :class:`~app.config.settings.Settings`."""
 
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 def default_log_file_dir() -> str:
@@ -12,7 +12,7 @@ def default_log_file_dir() -> str:
 class AppSettings(BaseModel):
     """Core application fields (mixed into ``Settings``)."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
     app_name: str = "Career Copilot"
     debug: bool = False
@@ -31,6 +31,37 @@ class AppSettings(BaseModel):
     mail_from_email: str = Field(default="noreply@example.com")
     mail_from_name: str = Field(default="Career Copilot")
     auth_dev_auto_verify_email: bool = False
-    langchain_tracing_v2: bool = False
-    langchain_api_key: str | None = None
-    langchain_project: str = Field(default="career-copilot")
+
+    # Env names mirror LangSmith docs + legacy LANGCHAIN_*; field name maps to LANGSMITH_TRACING_ENABLED too.
+    langsmith_tracing_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "LANGSMITH_TRACING_V2",
+            "LANGCHAIN_TRACING_V2",
+            "LANGSMITH_TRACING_ENABLED",
+            "LANGCHAIN_TRACING_ENABLED",
+        ),
+    )
+    langsmith_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "LANGSMITH_API_KEY",
+            "LANGCHAIN_API_KEY",
+        ),
+    )
+    langsmith_project: str = Field(
+        default="career-copilot",
+        validation_alias=AliasChoices(
+            "LANGSMITH_PROJECT",
+            "LANGCHAIN_PROJECT",
+        ),
+    )
+    langsmith_api_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "LANGSMITH_ENDPOINT",
+            "LANGCHAIN_ENDPOINT",
+            "LANGSMITH_API_URL",
+            "LANGCHAIN_API_URL",
+        ),
+    )

@@ -22,3 +22,9 @@ class WorkflowSettings(BaseModel):
         default=".data/langgraph_checkpoints.sqlite",
         validation_alias=AliasChoices("GRAPH_CHECKPOINT_SQLITE_PATH"),
     )
+    llm_history_max_tokens: int = Field(
+        default=5_000,
+        ge=512,
+        description="Approximate token cap for **planner + feedback** chat history only (checkpoint unchanged).",
+        validation_alias=AliasChoices("LLM_HISTORY_MAX_TOKENS"),
+    )
