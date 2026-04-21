@@ -3,6 +3,12 @@
 from __future__ import annotations
 
 
+def test_register_password_over_max_length_rejected(client) -> None:
+    body = {"name": "Long", "email": "longpw@example.com", "password": "a" * 513}
+    r = client.post("/auth/register", json=body)
+    assert r.status_code == 422
+
+
 def test_register_duplicate_email(client) -> None:
     body = {"name": "One", "email": "dup@example.com", "password": "password12"}
     assert client.post("/auth/register", json=body).status_code == 200

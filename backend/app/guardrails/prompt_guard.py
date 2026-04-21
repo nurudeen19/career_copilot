@@ -18,12 +18,10 @@ def is_prompt_guard_loaded() -> bool:
 
 
 def _hf_token(settings: Settings) -> str | None:
-    return (
-        settings.huggingface_token
-        or os.environ.get("HF_TOKEN")
-        or os.environ.get("HUGGING_FACE_HUB_TOKEN")
-        or None
-    )
+    # Primary: settings loads HF_TOKEN / HUGGING_FACE_HUB_TOKEN / HUGGINGFACE_TOKEN from .env or os.environ.
+    if settings.huggingface_token:
+        return settings.huggingface_token
+    return os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or None
 
 
 def setup_prompt_guard(settings: Settings) -> None:
@@ -35,7 +33,7 @@ def setup_prompt_guard(settings: Settings) -> None:
     token = _hf_token(settings)
     if not token:
         raise RuntimeError(
-            "Prompt guard requires HF_TOKEN (or HUGGINGFACE_TOKEN / HUGGING_FACE_HUB_TOKEN) "
+            "Prompt guard requires HF_TOKEN (or HUGGINGFACE_TOKEN / HUGGING_FACE_HUB_TOKEN) in .env or the process environment "
             "to access meta-llama/Llama-Prompt-Guard-2-86M."
         )
 

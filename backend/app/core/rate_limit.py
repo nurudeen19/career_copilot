@@ -45,8 +45,8 @@ def limit_auth_email() -> str:
     return _effective(get_settings().rate_limit_auth_email)
 
 
-def limit_verify_email_get() -> str:
-    return _effective(get_settings().rate_limit_verify_email_get)
+def limit_verify_email() -> str:
+    return _effective(get_settings().rate_limit_verify_email)
 
 
 def limit_reset_password() -> str:

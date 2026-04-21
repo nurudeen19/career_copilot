@@ -1,11 +1,13 @@
-"""Central logging setup for the backend (console, UTC timestamps, uvicorn alignment)."""
+"""Central logging setup for the backend (console, optional rotating file, UTC timestamps)."""
 
 from __future__ import annotations
 
 import logging
+import logging.handlers
 import sys
 from datetime import datetime, timezone
 from logging import LogRecord
+from pathlib import Path
 
 from app.config.settings import Settings
 
@@ -37,18 +39,33 @@ def configure_logging(settings: Settings | None = None) -> None:
     level_name = (s.log_level or "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
 
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(
-        _UtcFormatter(
-            fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-            datefmt="%Y-%m-%dT%H:%M:%SZ",
-        )
+    formatter = _UtcFormatter(
+        fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%SZ",
     )
+
+    stderr_handler = logging.StreamHandler(sys.stderr)
+    stderr_handler.setFormatter(formatter)
 
     root = logging.getLogger()
     root.handlers.clear()
     root.setLevel(level)
-    root.addHandler(handler)
+    root.addHandler(stderr_handler)
+
+    if s.log_file_enabled and (s.log_file_dir or "").strip():
+        log_dir = Path(s.log_file_dir).expanduser()
+        try:
+            log_dir.mkdir(parents=True, exist_ok=True)
+            file_handler = logging.handlers.RotatingFileHandler(
+                log_dir / "app.log",
+                maxBytes=10 * 1024 * 1024,
+                backupCount=5,
+                encoding="utf-8",
+            )
+            file_handler.setFormatter(formatter)
+            root.addHandler(file_handler)
+        except OSError as exc:
+            sys.stderr.write(f"WARNING: could not open log file under {log_dir}: {exc}\n")
 
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi"):
         logging.getLogger(name).setLevel(level)
@@ -64,6 +81,13 @@ def configure_logging(settings: Settings | None = None) -> None:
 
 
 def reset_logging_for_tests() -> None:
-    """Clear idempotency flag (tests only)."""
+    """Clear handlers and idempotency flag (tests only)."""
     global _configured
+    root = logging.getLogger()
+    for h in root.handlers[:]:
+        root.removeHandler(h)
+        try:
+            h.close()
+        except OSError:
+            pass
     _configured = False

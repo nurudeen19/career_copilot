@@ -24,6 +24,12 @@ const router = createRouter({
       meta: { guestLayout: true },
     },
     {
+      path: '/verify-email',
+      name: 'verify-email',
+      component: () => import('@/views/VerifyEmailView.vue'),
+      meta: { guestLayout: true },
+    },
+    {
       path: '/dashboard',
       name: 'dashboard',
       component: () => import('@/views/DashboardView.vue'),
@@ -43,7 +49,7 @@ router.beforeEach(async (to) => {
     return { name: 'signin', query: { next: to.fullPath } }
   }
 
-  if ((to.name === 'signin' || to.name === 'signup') && auth.canUseApp) {
+  if ((to.name === 'signin' || to.name === 'signup' || to.name === 'verify-email') && auth.canUseApp) {
     return { name: 'dashboard' }
   }
   return true

@@ -27,7 +27,7 @@ uv sync --extra test
 uv run pytest tests/ -q
 ```
 
-Tests use a temporary SQLite file, a FastAPI app **without** the production lifespan (no Hugging Face prompt guard load), and stubbed password hashing for stable bcrypt/passlib behaviour across environments.
+Tests use a temporary SQLite file, a FastAPI app **without** the production lifespan (no Hugging Face prompt guard load), and stubbed password hashing so tests do not run Argon2 work.
 
 ## Frontend
 

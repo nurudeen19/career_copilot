@@ -1,11 +1,17 @@
 """Environment-backed settings."""
 
 from functools import lru_cache
+from pathlib import Path
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.config.agents import AgentsConfig
+
+
+def _default_log_file_dir() -> str:
+    """``backend/logs`` regardless of process cwd (settings lives under ``app/config``)."""
+    return str(Path(__file__).resolve().parents[2] / "logs")
 
 
 class Settings(BaseSettings):
@@ -23,6 +29,14 @@ class Settings(BaseSettings):
         default="INFO",
         description="Root log level: DEBUG, INFO, WARNING, ERROR (also applied to uvicorn loggers).",
     )
+    log_file_enabled: bool = Field(
+        default=True,
+        description="If true, write rotating app.log under log_file_dir in addition to stderr.",
+    )
+    log_file_dir: str = Field(
+        default_factory=_default_log_file_dir,
+        description="Directory for app.log (created if missing). Set to /logs or /var/log/... in production.",
+    )
     cors_allow_origins: str = Field(
         default="http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173",
         description="Comma-separated origins for browser clients; use * to allow any (no credentials).",
@@ -38,7 +52,11 @@ class Settings(BaseSettings):
 
     public_app_base_url: str = Field(
         default="http://127.0.0.1:8000",
-        description="Public API base URL (no trailing slash) for auth links in outbound email.",
+        description="Public API base URL (no trailing slash). Used for password-reset links to the backend HTML form.",
+    )
+    frontend_app_base_url: str = Field(
+        default="http://127.0.0.1:5173",
+        description="SPA origin (no trailing slash). Email verification links open this URL; the SPA POSTs to the API.",
     )
 
     mailtrap_api_token: str | None = Field(
@@ -66,7 +84,7 @@ class Settings(BaseSettings):
         default="8/minute",
         description="Limit for POST /auth/resend-verification and /auth/forgot-password.",
     )
-    rate_limit_verify_email_get: str = Field(default="45/minute", description="Limit for GET /auth/verify-email.")
+    rate_limit_verify_email: str = Field(default="45/minute", description="Limit for POST /auth/verify-email.")
     rate_limit_reset_password: str = Field(
         default="15/minute",
         description="Limit for POST /auth/reset-password and GET reset form.",
@@ -96,7 +114,12 @@ class Settings(BaseSettings):
 
     huggingface_token: str | None = Field(
         default=None,
-        description="Hugging Face token (Llama Prompt Guard 2). If unset, HF_TOKEN / HUGGING_FACE_HUB_TOKEN env is used.",
+        validation_alias=AliasChoices(
+            "HF_TOKEN",
+            "HUGGING_FACE_HUB_TOKEN",
+            "HUGGINGFACE_TOKEN",
+        ),
+        description="Hugging Face token (Llama Prompt Guard 2). Accepts HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or HUGGINGFACE_TOKEN.",
     )
     prompt_guard_model_id: str = Field(
         default="meta-llama/Llama-Prompt-Guard-2-86M",

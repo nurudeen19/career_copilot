@@ -12,25 +12,24 @@ from app.models.base import Base
 
 @pytest.fixture(autouse=True)
 def _stub_password_hashing(monkeypatch: pytest.MonkeyPatch) -> None:
-    """
-    Avoid passlib/bcrypt backend self-tests that fail on some bcrypt 4.x + Python combos.
-    Auth flow still exercises DB + JWT; only the digest format is non-production.
-    """
+    """Deterministic password digests for tests (no passlib / Argon2 work)."""
     import app.services.auth as auth_mod
 
     def fake_hash(plain: str) -> str:
         return "test$" + plain
 
-    def fake_verify(plain: str, hashed: str) -> bool:
-        return hashed == "test$" + plain
+    def fake_verify_update(plain: str, hashed: str) -> tuple[bool, str | None]:
+        ok = hashed == "test$" + plain
+        return ok, None
 
     monkeypatch.setattr(auth_mod, "_hash_password", fake_hash)
-    monkeypatch.setattr(auth_mod, "_verify_password", fake_verify)
+    monkeypatch.setattr(auth_mod, "_verify_password_update", fake_verify_update)
 
 
 @pytest.fixture(autouse=True)
-def _reset_settings_cache() -> None:
-    """Ensure ``get_settings()`` picks up monkeypatched env per test."""
+def _reset_settings_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure ``get_settings()`` picks up monkeypatched env per test; avoid writing logs under backend/logs."""
+    monkeypatch.setenv("LOG_FILE_ENABLED", "0")
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()

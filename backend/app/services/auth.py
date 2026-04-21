@@ -19,7 +19,7 @@ from app.config.settings import Settings
 from app.models.user import User
 from app.services.mail import send_transactional_email
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto", argon2__type="ID")
 _log = logging.getLogger(__name__)
 
 VERIFY_TTL = timedelta(hours=48)
@@ -38,8 +38,18 @@ def _hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def _verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+def _verify_password_update(plain: str, hashed: str) -> tuple[bool, str | None]:
+    """
+    Verify ``plain`` against ``hashed``. If valid but passlib recommends rehashing
+    (e.g. Argon2 cost defaults changed), returns ``(True, new_hash)``; otherwise ``(True, None)``.
+    """
+    try:
+        verified, new_hash = pwd_context.verify_and_update(plain, hashed)
+        if not verified:
+            return False, None
+        return True, new_hash
+    except (ValueError, TypeError):
+        return False, None
 
 
 def _token_digest(settings: Settings, raw: str) -> str:
@@ -52,6 +62,10 @@ def _token_digest(settings: Settings, raw: str) -> str:
 
 def _public_base(settings: Settings) -> str:
     return settings.public_app_base_url.rstrip("/")
+
+
+def _frontend_web_base(settings: Settings) -> str:
+    return settings.frontend_app_base_url.rstrip("/")
 
 
 def _create_access_token(user_id: uuid.UUID, settings: Settings) -> str:
@@ -91,7 +105,7 @@ def register_user(db: Session, name: str, email: str, password: str, settings: S
     user.email_verification_token_digest = _token_digest(settings, raw)
     user.email_verification_expires_at = now + VERIFY_TTL
     try:
-        link = f"{_public_base(settings)}/auth/verify-email?token={raw}&user_id={user.id}"
+        link = f"{_frontend_web_base(settings)}/verify-email?token={raw}&user_id={user.id}"
         send_transactional_email(
             settings,
             to_email=user.email,
@@ -125,8 +139,15 @@ def register_user(db: Session, name: str, email: str, password: str, settings: S
 def login_user(db: Session, email: str, password: str, settings: Settings) -> tuple[str, User]:
     normalized = email.lower().strip()
     user = db.scalar(select(User).where(User.email == normalized))
-    if user is None or not _verify_password(password, user.hashed_password):
+    if user is None:
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    verified, new_hash = _verify_password_update(password, user.hashed_password)
+    if not verified:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    if new_hash is not None:
+        user.hashed_password = new_hash
+        db.commit()
+        db.refresh(user)
     if user.email_verified_at is None:
         raise HTTPException(
             status_code=403,
@@ -180,7 +201,7 @@ def resend_verification_email(db: Session, email: str, settings: Settings) -> No
     user.email_verification_expires_at = datetime.now(timezone.utc) + VERIFY_TTL
     db.flush()
     try:
-        link = f"{_public_base(settings)}/auth/verify-email?token={raw}&user_id={user.id}"
+        link = f"{_frontend_web_base(settings)}/verify-email?token={raw}&user_id={user.id}"
         send_transactional_email(
             settings,
             to_email=user.email,

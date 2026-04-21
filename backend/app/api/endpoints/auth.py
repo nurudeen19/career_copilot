@@ -15,7 +15,7 @@ from app.core.rate_limit import (
     limit_login,
     limit_register,
     limit_reset_password,
-    limit_verify_email_get,
+    limit_verify_email,
     limit_profile,
 )
 from app.db.session import get_db
@@ -28,6 +28,7 @@ from app.schema.auth import (
     ResetPasswordRequest,
     TokenResponse,
     UserResponse,
+    VerifyEmailRequest,
 )
 from app.services import auth as auth_service
 
@@ -91,17 +92,17 @@ def read_current_user(
     )
 
 
-@router.get("/verify-email", response_model=MessageResponse)
-@limiter.limit(limit_verify_email_get)
+@router.post("/verify-email", response_model=MessageResponse)
+@limiter.limit(limit_verify_email)
 def verify_email(
     request: Request,
-    token: str = Query(min_length=10),
-    user_id: uuid.UUID = Query(alias="user_id"),
+    body: VerifyEmailRequest,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> MessageResponse:
+    """Called from the SPA after the user opens the verification link (token not logged as a full URL path)."""
     _ = request.app
-    auth_service.verify_email_with_token(db, user_id, token, settings)
+    auth_service.verify_email_with_token(db, body.user_id, body.token, settings)
     return MessageResponse(detail="Email verified. You can sign in.")
 
 

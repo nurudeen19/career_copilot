@@ -44,6 +44,8 @@ def test_register_verify_then_login(
     assert len(captured) == 1
 
     body = captured[0]["html"] or captured[0]["text"]
+    assert "/verify-email?" in body and "token=" in body and "user_id=" in body
+
     m_tok = re.search(r"token=([^&\s\"']+)", body)
     m_uid = re.search(r"user_id=([^&\s\"']+)", body)
     assert m_tok and m_uid
@@ -55,7 +57,10 @@ def test_register_verify_then_login(
     assert blocked.status_code == 403
     assert "verified" in blocked.json()["detail"].lower()
 
-    rv = client_no_auto_verify.get(f"/auth/verify-email?token={token}&user_id={user_id}")
+    rv = client_no_auto_verify.post(
+        "/auth/verify-email",
+        json={"token": token, "user_id": user_id},
+    )
     assert rv.status_code == 200
 
     r2 = client_no_auto_verify.post("/auth/login", json={"email": email, "password": "longpass-1"})
@@ -87,7 +92,10 @@ def test_forgot_reset_password(
     m_uid = re.search(r"user_id=([^&\s\"']+)", html)
     token, user_id = m_tok.group(1), m_uid.group(1)
 
-    client_no_auto_verify.get(f"/auth/verify-email?token={token}&user_id={user_id}")
+    client_no_auto_verify.post(
+        "/auth/verify-email",
+        json={"token": token, "user_id": user_id},
+    )
     captured.clear()
 
     assert client_no_auto_verify.post("/auth/forgot-password", json={"email": email}).status_code == 200

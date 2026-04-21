@@ -79,6 +79,14 @@ export const useAuthStore = defineStore('auth', () => {
     })
   }
 
+  async function verifyEmail(token: string, userId: string): Promise<{ detail: string }> {
+    return apiFetch<{ detail: string }>('/auth/verify-email', {
+      method: 'POST',
+      body: JSON.stringify({ token, user_id: userId }),
+      skipAuth: true,
+    })
+  }
+
   function logout() {
     sessionStorage.removeItem('career_copilot_thread_id')
     setToken(null)
@@ -97,6 +105,7 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     logout,
     resendVerification,
+    verifyEmail,
     setToken,
     persistUser,
     loadUserFromStorage,

@@ -15,3 +15,5 @@ frontend/dist/
 *.local
 backend/todo.md
 backend/graphs/
+backend/logs/
+.vscode/

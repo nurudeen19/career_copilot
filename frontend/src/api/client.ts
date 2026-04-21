@@ -27,11 +27,25 @@ export class ApiError extends Error {
   }
 }
 
+function formatFastApiDetail(detail: unknown): string {
+  if (typeof detail === 'string') return detail
+  if (!Array.isArray(detail)) return typeof detail === 'object' && detail !== null ? JSON.stringify(detail) : String(detail)
+  const parts: string[] = []
+  for (const item of detail) {
+    if (item && typeof item === 'object' && 'msg' in item) {
+      let m = String((item as { msg: string }).msg)
+      if (m.startsWith('Value error, ')) m = m.slice('Value error, '.length)
+      parts.push(m)
+    }
+  }
+  return parts.length > 0 ? parts.join(' ') : JSON.stringify(detail)
+}
+
 async function parseDetail(res: Response): Promise<string> {
   try {
     const j = (await res.json()) as { detail?: unknown }
     if (typeof j.detail === 'string') return j.detail
-    if (Array.isArray(j.detail)) return JSON.stringify(j.detail)
+    if (j.detail !== undefined) return formatFastApiDetail(j.detail)
   } catch {
     /* ignore */
   }
@@ -51,7 +65,19 @@ export async function apiFetch<T>(
     const t = getStoredToken()
     if (t) headers.set('Authorization', `Bearer ${t}`)
   }
-  const res = await fetch(url, { ...init, headers })
+  let res: Response
+  try {
+    res = await fetch(url, { ...init, headers })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (e instanceof TypeError || msg === 'Failed to fetch' || msg.includes('fetch')) {
+      throw new ApiError(
+        0,
+        'Could not reach the API (network error). If you are running locally, start the backend and check the dev proxy / VITE_API_BASE_URL.',
+      )
+    }
+    throw e
+  }
   if (!res.ok) throw new ApiError(res.status, await parseDetail(res))
   if (res.status === 204) return undefined as T
   const ct = res.headers.get('content-type')

@@ -64,7 +64,7 @@ async function onSubmit() {
             minlength="8"
             required
           />
-          <p class="hint">At least 8 characters.</p>
+          <p class="hint">At least 8 characters (max 512).</p>
         </div>
         <button class="cc-btn cc-btn--primary submit" type="submit" :disabled="loading">
           {{ loading ? 'Creating…' : 'Create account' }}
