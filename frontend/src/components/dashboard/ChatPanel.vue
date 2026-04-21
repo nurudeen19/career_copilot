@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { nextTick, onUnmounted, ref, watch } from 'vue'
 
 import {
   streamWorkflow,
@@ -37,6 +37,75 @@ const input = ref('')
 const streaming = ref(false)
 const threadId = ref<string | null>(null)
 const error = ref<string | null>(null)
+
+/** While waiting for SSE: dots only → rotating lines → live step labels from the graph. */
+const STREAM_INTRO_MS = 2800
+const STREAM_ROTATE_MS = 2600
+
+const WAITING_LINES = [
+  'Planning the next course…',
+  'Researching for fresh signals…',
+  'Weaving research into a clear story…',
+  'Shaping your takeaway…',
+] as const
+
+const STEP_CAPTIONS: Record<string, string> = {
+  input_validation: 'Checking your message…',
+  validation_fail: 'Almost there…',
+  planner: 'Planning your next move…',
+  research: 'Digging into data and sources…',
+  analyst: 'Analyzing what this means for you…',
+  critic: 'Stress-testing the take…',
+  synthesizer: 'Writing your summary…',
+  feedback: 'Incorporating your feedback…',
+  user_handoff: 'Finishing up…',
+}
+
+type StreamUiPhase = 'intro' | 'rotating' | 'live'
+const streamPhase = ref<StreamUiPhase>('intro')
+const streamRotateIndex = ref(0)
+const streamLiveCaption = ref('')
+
+let streamIntroTimer: ReturnType<typeof setTimeout> | null = null
+let streamRotateTimer: ReturnType<typeof setInterval> | null = null
+
+function clearStreamWaitTimers() {
+  if (streamIntroTimer !== null) {
+    clearTimeout(streamIntroTimer)
+    streamIntroTimer = null
+  }
+  if (streamRotateTimer !== null) {
+    clearInterval(streamRotateTimer)
+    streamRotateTimer = null
+  }
+}
+
+function resetStreamUi() {
+  clearStreamWaitTimers()
+  streamPhase.value = 'intro'
+  streamRotateIndex.value = 0
+  streamLiveCaption.value = ''
+}
+
+function beginStreamWaitUi() {
+  resetStreamUi()
+  streamPhase.value = 'intro'
+  streamIntroTimer = setTimeout(() => {
+    if (!streaming.value) return
+    streamPhase.value = 'rotating'
+    streamRotateIndex.value = 0
+    streamRotateTimer = setInterval(() => {
+      if (!streaming.value || streamPhase.value !== 'rotating') return
+      streamRotateIndex.value = (streamRotateIndex.value + 1) % WAITING_LINES.length
+    }, STREAM_ROTATE_MS)
+  }, STREAM_INTRO_MS)
+}
+
+function onStreamGraphStep(step: string) {
+  clearStreamWaitTimers()
+  streamPhase.value = 'live'
+  streamLiveCaption.value = STEP_CAPTIONS[step] ?? 'Working…'
+}
 
 /** Legacy: thread id only (still updated for compatibility). */
 const THREAD_KEY = 'career_copilot_thread_id'
@@ -149,6 +218,10 @@ watch(
 )
 watch(threadId, persistState)
 
+onUnmounted(() => {
+  clearStreamWaitTimers()
+})
+
 loadPersistedState()
 void scrollToLatest()
 
@@ -164,6 +237,7 @@ async function send() {
   messages.value.push({ id: newMessageId(), role: 'user', content: text })
   input.value = ''
   streaming.value = true
+  beginStreamWaitUi()
   await scrollToLatest()
 
   let draft = ''
@@ -176,6 +250,7 @@ async function send() {
     })) {
       if (ev.kind === 'step') {
         sawChunk = true
+        onStreamGraphStep(ev.step)
         const { step, patch } = ev
         if (step === 'input_validation') {
           const v = extractValidationError(patch)
@@ -226,6 +301,8 @@ async function send() {
     })
     await scrollToLatest()
   } finally {
+    clearStreamWaitTimers()
+    resetStreamUi()
     streaming.value = false
     focusComposer()
   }
@@ -268,10 +345,23 @@ function onKeydown(e: KeyboardEvent) {
             </div>
           </div>
           <div v-if="streaming" class="row assistant">
-            <div class="bubble typing">
-              <span class="dot" />
-              <span class="dot" />
-              <span class="dot" />
+            <div class="bubble typing" :class="{ 'typing--wide': streamPhase !== 'intro' }">
+              <div class="typing-dots" aria-hidden="true">
+                <span class="dot" />
+                <span class="dot" />
+                <span class="dot" />
+              </div>
+              <p
+                v-if="streamPhase === 'rotating'"
+                :key="streamRotateIndex"
+                class="stream-caption"
+                aria-live="polite"
+              >
+                {{ WAITING_LINES[streamRotateIndex] }}
+              </p>
+              <p v-else-if="streamPhase === 'live' && streamLiveCaption" class="stream-caption" aria-live="polite">
+                {{ streamLiveCaption }}
+              </p>
             </div>
           </div>
         </div>
@@ -415,9 +505,24 @@ function onKeydown(e: KeyboardEvent) {
 
 .typing {
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 4rem;
+  padding: 0.5rem 0.25rem 0.65rem;
+}
+
+.typing--wide {
+  align-items: flex-start;
+  min-width: min(100%, 18rem);
+  max-width: min(85%, 36rem);
+}
+
+.typing-dots {
+  display: flex;
   gap: 0.35rem;
   align-items: center;
-  min-width: 4rem;
+  justify-content: center;
 }
 
 .dot {
@@ -428,11 +533,32 @@ function onKeydown(e: KeyboardEvent) {
   animation: bounce 1.2s ease infinite;
 }
 
-.dot:nth-child(2) {
+.typing-dots .dot:nth-child(2) {
   animation-delay: 0.15s;
 }
-.dot:nth-child(3) {
+.typing-dots .dot:nth-child(3) {
   animation-delay: 0.3s;
+}
+
+.stream-caption {
+  margin: 0;
+  width: 100%;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  font-weight: 500;
+  color: var(--color-ink-muted);
+  animation: captionIn 0.35s ease;
+}
+
+@keyframes captionIn {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes bounce {
