@@ -84,10 +84,14 @@ onMounted(async () => {
 
 <style scoped>
 .dash {
-  min-height: 100dvh;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background:
     radial-gradient(120% 80% at 100% 0%, rgba(61, 107, 92, 0.08), transparent 55%),
     radial-gradient(90% 60% at 0% 100%, rgba(198, 125, 78, 0.06), transparent 50%),
@@ -154,6 +158,7 @@ onMounted(async () => {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .body-inner {
@@ -164,6 +169,7 @@ onMounted(async () => {
   gap: 1rem;
   padding-top: 1rem;
   padding-bottom: 0;
+  overflow: hidden;
 }
 
 @media (min-width: 900px) {
@@ -176,13 +182,17 @@ onMounted(async () => {
 }
 
 .insight {
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0.5rem 0 0;
   max-width: 32rem;
 }
 
 @media (min-width: 900px) {
   .insight {
+    flex-shrink: 0;
     width: min(280px, 32%);
     padding-top: 0.35rem;
   }

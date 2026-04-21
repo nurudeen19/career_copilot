@@ -6,6 +6,7 @@ import {
   extractAssistantTextFromPatch,
   extractValidationError,
 } from '@/composables/useWorkflowStream'
+import { renderSafeMarkdown } from '@/utils/safeMarkdown'
 
 export type ChatMessage = { id: string; role: 'user' | 'assistant'; content: string }
 
@@ -340,9 +341,12 @@ function onKeydown(e: KeyboardEvent) {
       <div ref="scrollRef" class="scroll">
         <div class="scroll-pad">
           <div v-for="m in messages" :key="m.id" class="row" :class="m.role">
-            <div class="bubble">
-              {{ m.content }}
-            </div>
+            <!-- eslint-disable-next-line vue/no-v-html -- output from renderSafeMarkdown (marked + DOMPurify) -->
+            <div
+              class="bubble md-content"
+              :class="{ 'md-content--user': m.role === 'user' }"
+              v-html="renderSafeMarkdown(m.content)"
+            />
           </div>
           <div v-if="streaming" class="row assistant">
             <div class="bubble typing" :class="{ 'typing--wide': streamPhase !== 'intro' }">
@@ -458,6 +462,7 @@ function onKeydown(e: KeyboardEvent) {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -486,7 +491,126 @@ function onKeydown(e: KeyboardEvent) {
   border-radius: var(--radius-lg);
   font-size: 0.9375rem;
   line-height: 1.55;
-  white-space: pre-wrap;
+}
+
+.md-content {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.md-content :deep(p) {
+  margin: 0 0 0.65em;
+}
+
+.md-content :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.md-content :deep(h1),
+.md-content :deep(h2),
+.md-content :deep(h3),
+.md-content :deep(h4) {
+  margin: 0.85em 0 0.4em;
+  line-height: 1.25;
+  font-weight: 700;
+}
+
+.md-content :deep(h1) {
+  font-size: 1.2em;
+}
+.md-content :deep(h2) {
+  font-size: 1.1em;
+}
+.md-content :deep(h3),
+.md-content :deep(h4) {
+  font-size: 1.02em;
+}
+
+.md-content :deep(ul),
+.md-content :deep(ol) {
+  margin: 0 0 0.65em;
+  padding-left: 1.35em;
+}
+
+.md-content :deep(li) {
+  margin: 0.2em 0;
+}
+
+.md-content :deep(blockquote) {
+  margin: 0.5em 0;
+  padding: 0.35em 0 0.35em 0.85em;
+  border-left: 3px solid var(--color-border-strong);
+  color: var(--color-ink-muted);
+}
+
+.md-content :deep(hr) {
+  margin: 0.75em 0;
+  border: none;
+  border-top: 1px solid var(--color-border);
+}
+
+.md-content :deep(code) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 0.88em;
+  padding: 0.12em 0.35em;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.md-content :deep(pre) {
+  margin: 0.5em 0;
+  padding: 0.65em 0.85em;
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--color-border);
+  overflow-x: auto;
+}
+
+.md-content :deep(pre code) {
+  padding: 0;
+  background: none;
+  font-size: 0.84em;
+  white-space: pre;
+}
+
+.md-content :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  font-size: 0.9em;
+}
+
+.md-content :deep(th),
+.md-content :deep(td) {
+  border: 1px solid var(--color-border);
+  padding: 0.35em 0.5em;
+  text-align: left;
+}
+
+.md-content :deep(th) {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.md-content :deep(a) {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.md-content--user :deep(a) {
+  color: #fff;
+  text-decoration-color: rgba(255, 255, 255, 0.65);
+}
+
+.md-content--user :deep(code),
+.md-content--user :deep(pre) {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.md-content--user :deep(blockquote) {
+  border-left-color: rgba(255, 255, 255, 0.45);
+  color: rgba(255, 255, 255, 0.88);
 }
 
 .row.user .bubble {
