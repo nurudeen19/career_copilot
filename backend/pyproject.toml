@@ -36,15 +36,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Prompt guard (HF): install one of these. For CPU wheels in Docker, use PyTorch's CPU index
-# (see Dockerfile / README). Extras only differ in name/documentation — pin torch via index at install time.
-transformers-cpu = [
+# Transformer extras: use with uv sync --extra transformer-cpu or --extra transformer-gpu
+# PyTorch wheels selected via uv tool indices (see [tool.uv] below)
+transformer-cpu = [
     "transformers>=4.51",
     "torch>=2.6",
+    "accelerate>=1.0",
 ]
-transformers-gpu = [
+transformer-gpu = [
     "transformers>=4.51",
     "torch>=2.6",
+    "accelerate>=1.0",
 ]
 test = [
     "pytest>=8.3",
@@ -53,6 +55,34 @@ test = [
 
 [tool.setuptools.packages.find]
 where = ["."]
+
+[tool.uv]
+# Prevent both CPU and GPU extras from being installed simultaneously
+conflicts = [
+    [
+        { extra = "transformer-cpu" },
+        { extra = "transformer-gpu" },
+    ],
+]
+compile-bytecode = true
+
+# Define PyTorch index URLs for CPU and GPU variants
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+# Route torch package to appropriate index based on extra
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", extra = "transformer-cpu" },
+    { index = "pytorch-cu128", extra = "transformer-gpu" },
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

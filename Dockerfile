@@ -1,6 +1,10 @@
 # syntax=docker/dockerfile:1
+# Multi-stage image: Hugging Face Spaces / Docker Hub + local dev.
+# Uses official `uv` builder image for fast, efficient dependency resolution.
+# CPU PyTorch index avoids pulling CUDA wheels in slim CPU environments.
+
 # Build args for controlling transformer/torch installation
-ARG TORCH_VARIANT=transformers-cpu
+ARG TORCH_VARIANT=transformer-cpu
 
 # -----------------------------------------------------------------------------
 # Stage 1 — build with uv (official uv builder image)
@@ -15,16 +19,11 @@ COPY backend/alembic.ini ./
 COPY backend/database ./database
 COPY backend/scripts ./scripts
 
-# Set PyTorch index URL based on variant: CPU uses custom index, GPU uses default PyTorch index
-RUN if [ "${TORCH_VARIANT}" = "transformers-gpu" ]; then \
-        export TORCH_INDEX="https://download.pytorch.org/whl/cu118"; \
-    else \
-        export TORCH_INDEX="https://download.pytorch.org/whl/cpu"; \
-    fi && \
-    uv venv /opt/venv && \
-    uv pip install --python /opt/venv/bin/python \
-        --extra-index-url ${TORCH_INDEX} \
-        ".[${TORCH_VARIANT}]"
+# Create venv and sync dependencies with uv
+ENV VIRTUAL_ENV=/opt/venv
+RUN python -m venv /opt/venv && \
+    uv sync --python /opt/venv/bin/python \
+        --extra ${TORCH_VARIANT}
 
 # -----------------------------------------------------------------------------
 # Stage 2 — minimal runtime (Python 3.14-slim)
