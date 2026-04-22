@@ -28,6 +28,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libpq-dev
 
 COPY --link backend/pyproject.toml backend/README.md ./
+COPY --link backend/uv.lock ./
 COPY --link backend/app ./app
 COPY --link backend/alembic.ini ./
 COPY --link backend/database ./database
