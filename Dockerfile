@@ -1,17 +1,27 @@
 # syntax=docker/dockerfile:1
 # Multi-stage image: Hugging Face Spaces / Docker Hub + local dev.
-# Uses official `uv` builder image for fast, efficient dependency resolution.
+# Uses `uv` for fast, efficient dependency resolution.
 # CPU PyTorch index avoids pulling CUDA wheels in slim CPU environments.
 
 # Build args for controlling transformer/torch installation
 ARG TORCH_VARIANT=transformer-cpu
 
 # -----------------------------------------------------------------------------
-# Stage 1 — build with uv (official uv builder image)
+# Stage 1 — build with uv (Python 3.14 slim + uv)
 # -----------------------------------------------------------------------------
-FROM ghcr.io/astral-sh/uv:latest AS builder
+FROM python:3.14-slim-bookworm AS builder
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
+
+# Install uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 COPY backend/pyproject.toml backend/README.md ./
 COPY backend/app ./app
