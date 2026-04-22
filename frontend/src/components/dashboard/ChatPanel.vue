@@ -8,7 +8,15 @@ import {
 } from '@/composables/useWorkflowStream'
 import { renderSafeMarkdown } from '@/utils/safeMarkdown'
 
-export type ChatMessage = { id: string; role: 'user' | 'assistant'; content: string }
+export type ChatMessage = {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  /** True when this reply came from a run that executed research → … → synthesizer. */
+  researchBacked?: boolean
+  /** Local only: thumbs already chosen (up = no server call; down triggered replan stream). */
+  userRating?: 'up' | 'down'
+}
 
 const props = defineProps<{
   profileComplete: boolean
@@ -58,9 +66,11 @@ const STEP_CAPTIONS: Record<string, string> = {
   analyst: 'Analyzing what this means for you…',
   critic: 'Stress-testing the take…',
   synthesizer: 'Writing your summary…',
-  feedback: 'Incorporating your feedback…',
   user_handoff: 'Finishing up…',
 }
+
+/** Steps that mean the user saw a researched pipeline answer (eligible for thumbs). */
+const RESEARCH_PIPELINE_STEPS = new Set(['research', 'analyst', 'critic', 'synthesizer'])
 
 type StreamUiPhase = 'intro' | 'rotating' | 'live'
 const streamPhase = ref<StreamUiPhase>('intro')
@@ -115,6 +125,29 @@ const CHAT_STATE_KEY = 'career_copilot_chat_state_v1'
 
 type StoredChat = { v?: number; thread_id?: string | null; messages?: unknown[] }
 
+function foldAssistantDraftFromStep(step: string, patch: unknown, acc: { text: string }) {
+  if (step === 'input_validation') {
+    const v = extractValidationError(patch)
+    if (v) acc.text = v
+  } else if (step === 'validation_fail') {
+    const t = extractAssistantTextFromPatch(patch)
+    if (t) acc.text = t
+  } else if (step === 'user_handoff') {
+    const h = extractAssistantTextFromPatch(patch)
+    if (h) acc.text = h
+  } else if (step === 'synthesizer') {
+    const t = extractAssistantTextFromPatch(patch)
+    if (t) acc.text = t
+  }
+}
+
+/** Must match ``app.graph.feedback_markers.THUMBS_DOWN_FEEDBACK_MARK`` (opaque; planner asks what's wrong). */
+const THUMBS_DOWN_FEEDBACK_MARK = 'USER_THUMBS_DOWN_LAST_PIPELINE_REPLY'
+
+function thumbsDownPlannerFeedback(): string {
+  return THUMBS_DOWN_FEEDBACK_MARK
+}
+
 function loadPersistedState() {
   const legacyTid = sessionStorage.getItem(THREAD_KEY)
   if (legacyTid) threadId.value = legacyTid
@@ -140,7 +173,16 @@ function loadPersistedState() {
         const id = typeof r.id === 'string' && r.id ? r.id : newMessageId()
         if (role !== 'user' && role !== 'assistant') continue
         if (typeof content !== 'string' || !content.trim()) continue
-        restored.push({ id, role, content: content.trim() })
+        const researchBacked = r.researchBacked === true
+        const ur = r.userRating
+        const userRating = ur === 'up' || ur === 'down' ? ur : undefined
+        restored.push({
+          id,
+          role,
+          content: content.trim(),
+          ...(researchBacked ? { researchBacked: true } : {}),
+          ...(userRating ? { userRating } : {}),
+        })
       }
       if (restored.length > 0) {
         messages.value = restored
@@ -176,7 +218,13 @@ function persistState() {
       JSON.stringify({
         v: 1,
         thread_id: threadId.value,
-        messages: messages.value,
+        messages: messages.value.map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          ...(m.researchBacked ? { researchBacked: true } : {}),
+          ...(m.userRating ? { userRating: m.userRating } : {}),
+        })),
       }),
     )
     if (threadId.value) sessionStorage.setItem(THREAD_KEY, threadId.value)
@@ -226,6 +274,108 @@ onUnmounted(() => {
 loadPersistedState()
 void scrollToLatest()
 
+type WorkflowTurnResult =
+  | { ok: true; assistantText: string; researchBacked: boolean }
+  | { ok: false; error: string }
+
+async function runWorkflowTurn(params: {
+  message: string
+  user_feedback?: string | null
+}): Promise<WorkflowTurnResult> {
+  const draft = { text: '' }
+  let sawChunk = false
+  let researchBacked = false
+
+  try {
+    for await (const ev of streamWorkflow({
+      message: params.message,
+      thread_id: threadId.value,
+      user_feedback: params.user_feedback ?? null,
+    })) {
+      if (ev.kind === 'step') {
+        sawChunk = true
+        onStreamGraphStep(ev.step)
+        if (RESEARCH_PIPELINE_STEPS.has(ev.step)) researchBacked = true
+        foldAssistantDraftFromStep(ev.step, ev.patch, draft)
+      } else if (ev.kind === 'done') {
+        if (ev.thread_id) {
+          threadId.value = ev.thread_id
+          sessionStorage.setItem(THREAD_KEY, ev.thread_id)
+        }
+        const trimmed = draft.text.trim()
+        const assistantText =
+          trimmed ||
+          (sawChunk
+            ? 'Here’s what I have so far — feel free to ask for more detail on any part.'
+            : '')
+        return { ok: true, assistantText, researchBacked }
+      } else if (ev.kind === 'error') {
+        return { ok: false, error: ev.detail }
+      }
+    }
+    return { ok: false, error: 'Stream ended unexpectedly.' }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Request failed'
+    return { ok: false, error: msg }
+  }
+}
+
+function onThumbUp(m: ChatMessage) {
+  if (streaming.value || m.role !== 'assistant' || m.userRating) return
+  m.userRating = 'up'
+}
+
+async function onThumbDown(m: ChatMessage) {
+  if (streaming.value || m.role !== 'assistant' || m.userRating) return
+  if (!props.profileComplete) {
+    emit('need-profile')
+    return
+  }
+  if (!threadId.value) {
+    error.value = 'Start a conversation first so we can follow up on this thread.'
+    return
+  }
+
+  m.userRating = 'down'
+  error.value = null
+  streaming.value = true
+  beginStreamWaitUi()
+  await scrollToLatest()
+
+  const result = await runWorkflowTurn({
+    message: '',
+    user_feedback: thumbsDownPlannerFeedback(),
+  })
+
+  clearStreamWaitTimers()
+  resetStreamUi()
+  streaming.value = false
+
+  if (result.ok) {
+    if (result.assistantText.trim()) {
+      messages.value.push({
+        id: newMessageId(),
+        role: 'assistant',
+        content: result.assistantText.trim(),
+        ...(result.researchBacked ? { researchBacked: true } : {}),
+      })
+    }
+    await scrollToLatest()
+    focusComposer()
+    return
+  }
+
+  error.value = result.error
+  delete m.userRating
+  messages.value.push({
+    id: newMessageId(),
+    role: 'assistant',
+    content: `Couldn’t send that feedback — ${result.error}`,
+  })
+  await scrollToLatest()
+  focusComposer()
+}
+
 async function send() {
   const text = input.value.trim()
   if (!text || streaming.value) return
@@ -241,72 +391,34 @@ async function send() {
   beginStreamWaitUi()
   await scrollToLatest()
 
-  let draft = ''
-  let sawChunk = false
+  const result = await runWorkflowTurn({ message: text })
 
-  try {
-    for await (const ev of streamWorkflow({
-      message: text,
-      thread_id: threadId.value,
-    })) {
-      if (ev.kind === 'step') {
-        sawChunk = true
-        onStreamGraphStep(ev.step)
-        const { step, patch } = ev
-        if (step === 'input_validation') {
-          const v = extractValidationError(patch)
-          if (v) draft = v
-        } else if (step === 'validation_fail') {
-          const t = extractAssistantTextFromPatch(patch)
-          if (t) draft = t
-        } else if (step === 'user_handoff') {
-          const h = extractAssistantTextFromPatch(patch)
-          if (h) draft = h
-        } else if (step === 'synthesizer') {
-          const t = extractAssistantTextFromPatch(patch)
-          if (t) draft = t
-        }
-      } else if (ev.kind === 'done') {
-        if (ev.thread_id) {
-          threadId.value = ev.thread_id
-          sessionStorage.setItem(THREAD_KEY, ev.thread_id)
-        }
-        if (draft.trim()) {
-          messages.value.push({ id: newMessageId(), role: 'assistant', content: draft.trim() })
-        } else if (sawChunk) {
-          messages.value.push({
-            id: newMessageId(),
-            role: 'assistant',
-            content: 'Here’s what I have so far — feel free to ask for more detail on any part.',
-          })
-        }
-        draft = ''
-        await scrollToLatest()
-      } else if (ev.kind === 'error') {
-        error.value = ev.detail
-        messages.value.push({
-          id: newMessageId(),
-          role: 'assistant',
-          content: `Something went wrong: ${ev.detail}`,
-        })
-        await scrollToLatest()
-      }
+  clearStreamWaitTimers()
+  resetStreamUi()
+  streaming.value = false
+
+  if (result.ok) {
+    if (result.assistantText.trim()) {
+      messages.value.push({
+        id: newMessageId(),
+        role: 'assistant',
+        content: result.assistantText.trim(),
+        ...(result.researchBacked ? { researchBacked: true } : {}),
+      })
     }
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Request failed'
-    error.value = msg
-    messages.value.push({
-      id: newMessageId(),
-      role: 'assistant',
-      content: `Couldn’t complete that request — ${msg}`,
-    })
     await scrollToLatest()
-  } finally {
-    clearStreamWaitTimers()
-    resetStreamUi()
-    streaming.value = false
     focusComposer()
+    return
   }
+
+  error.value = result.error
+  messages.value.push({
+    id: newMessageId(),
+    role: 'assistant',
+    content: `Something went wrong: ${result.error}`,
+  })
+  await scrollToLatest()
+  focusComposer()
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -341,12 +453,44 @@ function onKeydown(e: KeyboardEvent) {
       <div ref="scrollRef" class="scroll">
         <div class="scroll-pad">
           <div v-for="m in messages" :key="m.id" class="row" :class="m.role">
-            <!-- eslint-disable-next-line vue/no-v-html -- output from renderSafeMarkdown (marked + DOMPurify) -->
-            <div
-              class="bubble md-content"
-              :class="{ 'md-content--user': m.role === 'user' }"
-              v-html="renderSafeMarkdown(m.content)"
-            />
+            <template v-if="m.role === 'user'">
+              <!-- eslint-disable-next-line vue/no-v-html -- output from renderSafeMarkdown (marked + DOMPurify) -->
+              <div class="bubble md-content md-content--user" v-html="renderSafeMarkdown(m.content)" />
+            </template>
+            <template v-else>
+              <div class="assistant-block">
+                <!-- eslint-disable-next-line vue/no-v-html -->
+                <div class="bubble md-content" v-html="renderSafeMarkdown(m.content)" />
+                <div
+                  v-if="m.researchBacked && !m.userRating"
+                  class="rating-row"
+                  role="group"
+                  aria-label="Was this researched summary helpful?"
+                >
+                  <button
+                    type="button"
+                    class="rating-btn"
+                    :disabled="streaming"
+                    aria-label="Thumbs up — helpful"
+                    title="Helpful"
+                    @click="onThumbUp(m)"
+                  >
+                    <span class="rating-ico" aria-hidden="true">👍</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="rating-btn"
+                    :disabled="streaming"
+                    aria-label="Thumbs down — ask for a better follow-up"
+                    title="Not helpful"
+                    @click="onThumbDown(m)"
+                  >
+                    <span class="rating-ico" aria-hidden="true">👎</span>
+                  </button>
+                </div>
+                <p v-else-if="m.userRating === 'up'" class="rating-note" aria-live="polite">Thanks — glad it helped.</p>
+              </div>
+            </template>
           </div>
           <div v-if="streaming" class="row assistant">
             <div class="bubble typing" :class="{ 'typing--wide': streamPhase !== 'intro' }">
@@ -483,6 +627,53 @@ function onKeydown(e: KeyboardEvent) {
 
 .row.assistant {
   justify-content: flex-start;
+}
+
+.assistant-block {
+  max-width: min(85%, 36rem);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.rating-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0 0.1rem;
+}
+
+.rating-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.rating-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(198, 125, 78, 0.45);
+}
+
+.rating-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.rating-note {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-muted, #6b6b6b);
 }
 
 .bubble {
