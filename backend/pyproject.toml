@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "career-copilot"
+version = "0.1.0"
+description = "Agentic career advisor (chat)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "sqlalchemy>=2.0",
+    "alembic>=1.14",
+    "psycopg[binary]>=3.2",
+    "passlib[argon2]>=1.7",
+    "python-jose[cryptography]>=3.3",
+    "email-validator>=2.0",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.2",
+    "langchain-core>=1.2.10",
+    "langchain>=1.2.0",
+    "langgraph>=1.1.5,<1.2.0",
+    "langchain-openai>=0.2.0",
+    "langchain-groq>=0.2.0",
+    "langchain-google-genai>=2.0.0",
+    "httpx>=0.27",
+    "langchain-tavily>=0.2.18",
+    "langsmith>=0.3",
+    "langgraph-checkpoint-postgres>=2.0",
+    "langgraph-checkpoint-sqlite>=3.0.3",
+    "tenacity>=9.0",
+    "mailtrap>=2.5.0",
+    "slowapi>=0.1.9",
+]
+
+[project.optional-dependencies]
+# Prompt guard (HF): install one of these. For CPU wheels in Docker, use PyTorch's CPU index
+# (see Dockerfile / README). Extras only differ in name/documentation — pin torch via index at install time.
+transformers-cpu = [
+    "transformers>=4.51",
+    "torch>=2.6",
+]
+transformers-gpu = [
+    "transformers>=4.51",
+    "torch>=2.6",
+]
+test = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
