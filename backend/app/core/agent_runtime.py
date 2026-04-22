@@ -28,14 +28,21 @@ def _agent_cache_key(
 
 
 def _model_for_create_agent(model: Any, *, structured: bool) -> Any:
-    """``create_agent`` only auto-detects provider JSON schema on ``BaseChatModel`` (or a model id string).
+    """Resolve the chat runnable passed into ``create_agent``.
 
-    ``with_fallbacks`` wraps the chat model in ``RunnableWithFallbacks``, which is not a
-    ``BaseChatModel``; LangChain then falls back to tool-style structured output and the
-    graph often ends without ``structured_response``. Use the primary runnable for
-    structured agents (resilience stays on the graph invoke path where applicable).
+    When ``fallback_model`` is set, ``build_chat_model`` returns ``RunnableWithFallbacks``.
+    We pass that through for structured agents so primary provider failures can invoke the
+    backup model (LangChain routes on error). If a release regresses structured output with
+    fallbacks, fall back to the inner ``BaseChatModel`` only.
     """
     if not structured:
+        return model
+    try:
+        from langchain_core.runnables.fallbacks import RunnableWithFallbacks
+    except ImportError:  # pragma: no cover
+        RunnableWithFallbacks = ()  # type: ignore[misc, assignment]
+
+    if RunnableWithFallbacks and isinstance(model, RunnableWithFallbacks):
         return model
     if isinstance(model, BaseChatModel):
         return model

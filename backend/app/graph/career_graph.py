@@ -24,6 +24,7 @@ from app.core.agent_runtime import AgentRuntime, get_agent_runtime
 from app.core.retry_policy import WORKFLOW_RETRY
 from app.graph.agent_invoke import invoke_agent_with_resilience
 from app.graph.checkpoint import dispose_checkpointer, get_checkpointer
+from app.graph.feedback_markers import THUMBS_DOWN_FEEDBACK_MARK
 from app.graph.message_history import messages_for_llm
 from app.guardrails import run_user_input_guardrails
 from app.tools.runtime_context import workflow_user_id as workflow_user_id_var
@@ -116,6 +117,21 @@ def reset_graph() -> None:
     dispose_checkpointer()
 
 
+# Providers such as Google Gemini reject requests with no user-role content; pipeline steps are often
+# system-context-only before tools run.
+_PIPELINE_STEP_USER_STUB = HumanMessage(
+    content=(
+        "Using only the system context above for this workflow step, execute your role and return "
+        "the required structured output."
+    )
+)
+
+
+def _messages_for_pipeline_agent(prefix_and_context: list[AnyMessage]) -> list[AnyMessage]:
+    """Append a minimal human turn so chat models always receive non-empty user contents."""
+    return [*prefix_and_context, _PIPELINE_STEP_USER_STUB]
+
+
 def _user_id_prefix(state: CareerGraphState) -> list[AnyMessage]:
     uid = (state.get("user_id") or "").strip()
     if not uid:
@@ -190,8 +206,24 @@ def _make_planner_node(runtime: AgentRuntime):
         tail: list[AnyMessage] = []
         if fb_raw:
             plan_blob = json.dumps(state.get("plan", {}), default=str)[:8000]
+            if fb_raw.strip() == THUMBS_DOWN_FEEDBACK_MARK:
+                dissatisfaction = (
+                    "The user negatively rated the last assistant reply that followed the full researched pipeline "
+                    "(thumbs down). Do **not** assume what was wrong (accuracy, depth, tone, missing angle, etc.). "
+                    "Use handoff=user_clarify: in assistant_message, acknowledge briefly and ask 1–2 focused "
+                    "questions so they can say what missed the mark or what to change. "
+                    "Use handoff=research only after they give enough direction or explicitly ask to retry research.\n\n"
+                    f"Rating marker (opaque): {THUMBS_DOWN_FEEDBACK_MARK}"
+                )
+            else:
+                dissatisfaction = (
+                    "User dissatisfaction or correction:\n"
+                    + fb_raw
+                    + "\n\nWhen that feedback is brief, use the most recent assistant message(s) in the thread "
+                    "above as the concrete target of revision."
+                )
             tail = [
-                SystemMessage(content=f"User dissatisfaction or correction:\n{fb_raw}"),
+                SystemMessage(content=dissatisfaction),
                 SystemMessage(
                     content=(
                         "Return to planning. Prior plan JSON (may revise, do not blindly repeat):\n"
@@ -266,7 +298,7 @@ def _make_research_node(runtime: AgentRuntime):
         out = invoke_agent_with_resilience(
             lambda: _invoke_agent_graph(
                 ResearchAgent(runtime).graph,
-                _user_id_prefix(state) + ctx,
+                _messages_for_pipeline_agent(_user_id_prefix(state) + ctx),
                 workflow_user_id=uid,
             ),
             step="research",
@@ -304,7 +336,7 @@ def _make_analyst_node(runtime: AgentRuntime):
         out = invoke_agent_with_resilience(
             lambda: _invoke_agent_graph(
                 AnalystAgent(runtime).graph,
-                _user_id_prefix(state) + ctx,
+                _messages_for_pipeline_agent(_user_id_prefix(state) + ctx),
                 workflow_user_id=uid,
             ),
             step="analyst",
@@ -344,7 +376,7 @@ def _make_critic_node(runtime: AgentRuntime):
         out = invoke_agent_with_resilience(
             lambda: _invoke_agent_graph(
                 CriticAgent(runtime).graph,
-                _user_id_prefix(state) + ctx,
+                _messages_for_pipeline_agent(_user_id_prefix(state) + ctx),
                 workflow_user_id=uid,
             ),
             step="critic",
@@ -392,7 +424,7 @@ def _make_synthesizer_node(runtime: AgentRuntime):
         out = invoke_agent_with_resilience(
             lambda: _invoke_agent_graph(
                 SynthesizerAgent(runtime).graph,
-                _user_id_prefix(state) + ctx,
+                _messages_for_pipeline_agent(_user_id_prefix(state) + ctx),
                 workflow_user_id=uid,
             ),
             step="synthesizer",

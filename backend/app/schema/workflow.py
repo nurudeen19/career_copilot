@@ -23,7 +23,11 @@ class WorkflowStreamRequest(BaseModel):
     user_feedback: str | None = Field(
         default=None,
         max_length=48_000,
-        description="If set, the planner sees it as follow-up dissatisfaction or correction (typically with an existing ``thread_id``).",
+        description=(
+            "If set, the planner sees it as follow-up dissatisfaction or correction (typically with an existing "
+            "``thread_id``). UI thumbs-down sends the opaque marker ``USER_THUMBS_DOWN_LAST_PIPELINE_REPLY``; "
+            "free-text corrections stay short; long prior replies live in checkpointed ``messages``."
+        ),
     )
 
     @model_validator(mode="after")

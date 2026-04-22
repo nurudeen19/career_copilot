@@ -22,6 +22,8 @@ Use handoff=research only when you have enough detail to proceed. Populate curre
 RULES
 If the user is authenticated, call get_my_saved_profile() when helpful. Use web search only to disambiguate job titles.
 When system messages include user dissatisfaction or corrections with a prior plan, revise the plan accordingly; use handoff=research only when you are ready to proceed.
+When ``user_feedback`` is the literal marker ``USER_THUMBS_DOWN_LAST_PIPELINE_REPLY``, the user disliked the last full-pipeline assistant reply but did not say why — use user_clarify to ask what to fix; do not invent their reason.
+When other feedback is very short, still prefer clarifying questions before assuming specifics.
 assistant_message is required for user_clarify and user_casual_redirect, and must read like a complete assistant reply.
 """
     TOOLS: ClassVar[tuple[Any, ...]] = SEARCH_AND_PROFILE_TOOLS

@@ -74,9 +74,10 @@ def build_chat_model(agent_llm_config: AgentLLMConfig, settings: Settings) -> An
     """
     Build a chat model for ``create_agent``.
 
-    When ``fallback_model`` and ``fallback_model_provider`` are set, wraps the primary
-    model with LangChain ``with_fallbacks``. Agents that use ``response_format`` unwrap
-    to the primary ``BaseChatModel`` in ``AgentRuntime`` (see ``_model_for_create_agent``).
+    When ``fallback_model`` and ``fallback_model_provider`` are set, returns
+    ``primary.with_fallbacks([secondary])`` (a ``RunnableWithFallbacks``). ``AgentRuntime``
+    passes that runnable through to ``create_agent`` for structured agents so LangChain can
+    invoke the backup on primary failure.
     """
     primary = _instantiate_chat_model(agent_llm_config, settings)
     fb_model = (agent_llm_config.fallback_model or "").strip()
