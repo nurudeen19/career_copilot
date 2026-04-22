@@ -9,9 +9,6 @@ import logging
 import os
 from typing import Any
 
-import torch
-from torch.nn.functional import softmax
-
 from app.config.settings import Settings, get_settings
 
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
@@ -43,7 +40,14 @@ def setup_prompt_guard(settings: Settings) -> None:
             f"to access {settings.prompt_guard.model_id}."
         )
 
-    from transformers import pipeline
+    try:
+        from transformers import pipeline
+    except ImportError as exc:  # pragma: no cover
+        raise RuntimeError(
+            "transformers is required for the prompt guard. Install an optional extra, e.g. "
+            "``pip install '.[transformers-cpu]'`` (use PyTorch's CPU wheel index in Docker) or "
+            "``pip install '.[transformers-gpu]'`` for GPU hosts, then reinstall."
+        ) from exc
 
     kwargs: dict[str, Any] = {
         "task": "text-classification",
@@ -81,6 +85,9 @@ def _malicious_class_index(model: Any) -> int:
 
 def _softmax_malicious_probability(text: str) -> float:
     """P(malicious) after softmax — same construction as Meta ``get_jailbreak_score``."""
+    import torch
+    from torch.nn.functional import softmax
+
     pipe = _pipeline
     if pipe is None:
         raise RuntimeError("prompt_guard pipeline is not loaded")
