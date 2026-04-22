@@ -25,6 +25,6 @@ class WorkflowSettings(BaseModel):
     llm_history_max_tokens: int = Field(
         default=5_000,
         ge=512,
-        description="Approximate token cap for **planner + feedback** chat history only (checkpoint unchanged).",
+        description="Approximate token cap for **planner** chat history only (checkpoint unchanged).",
         validation_alias=AliasChoices("LLM_HISTORY_MAX_TOKENS"),
     )

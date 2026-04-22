@@ -1,4 +1,4 @@
-"""Bounded chat history for agents that need **conversation** context (planner + feedback only).
+"""Bounded chat history for agents that need **conversation** context (planner only).
 """
 
 from __future__ import annotations

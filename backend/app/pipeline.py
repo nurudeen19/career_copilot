@@ -55,7 +55,6 @@ def apply_feedback(ctx: dict, user_feedback: str) -> dict:
             "analysis": final.get("analysis"),
             "critique": final.get("critique"),
             "synthesis": final.get("synthesis"),
-            "feedback": final.get("feedback"),
         }
     )
     return ctx

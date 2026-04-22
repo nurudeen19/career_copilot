@@ -23,7 +23,7 @@ class WorkflowStreamRequest(BaseModel):
     user_feedback: str | None = Field(
         default=None,
         max_length=48_000,
-        description="If set, routes through the feedback node after validation (typically with an existing ``thread_id``).",
+        description="If set, the planner sees it as follow-up dissatisfaction or correction (typically with an existing ``thread_id``).",
     )
 
     @model_validator(mode="after")

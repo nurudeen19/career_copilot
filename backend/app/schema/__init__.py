@@ -3,7 +3,6 @@
 from app.schema.agent_outputs import (
     AnalystAgentOutput,
     CriticAgentOutput,
-    FeedbackAgentOutput,
     PlannerAgentOutput,
     ResearchAgentOutput,
     SynthesizerAgentOutput,
@@ -17,7 +16,6 @@ from app.schema.workflow import WorkflowStreamRequest
 __all__ = [
     "AnalystAgentOutput",
     "CriticAgentOutput",
-    "FeedbackAgentOutput",
     "LoginRequest",
     "PlannerAgentOutput",
     "ProfileResponse",

@@ -16,7 +16,6 @@ from typing_extensions import NotRequired, TypedDict
 
 from app.agents.analyst import AnalystAgent
 from app.agents.critic import CriticAgent
-from app.agents.feedback import FeedbackAgent
 from app.agents.planner import PlannerAgent
 from app.agents.research import ResearchAgent
 from app.agents.synthesizer import SynthesizerAgent
@@ -31,7 +30,6 @@ from app.tools.runtime_context import workflow_user_id as workflow_user_id_var
 from app.schema.agent_outputs import (
     AnalystAgentOutput,
     CriticAgentOutput,
-    FeedbackAgentOutput,
     PlannerAgentOutput,
     ResearchAgentOutput,
     SynthesizerAgentOutput,
@@ -110,7 +108,6 @@ class CareerGraphState(TypedDict, total=False):
     analysis: NotRequired[dict[str, Any]]
     critique: NotRequired[dict[str, Any]]
     synthesis: NotRequired[dict[str, Any]]
-    feedback: NotRequired[dict[str, Any]]
 
 
 def reset_graph() -> None:
@@ -158,11 +155,9 @@ def _validation_fail_node(state: CareerGraphState) -> dict[str, Any]:
     return {"messages": [AIMessage(content=err)]}
 
 
-def _route_after_input(state: CareerGraphState) -> Literal["validation_fail", "feedback", "planner"]:
+def _route_after_input(state: CareerGraphState) -> Literal["validation_fail", "planner"]:
     if state.get("validation_error"):
         return "validation_fail"
-    if (state.get("user_feedback") or "").strip():
-        return "feedback"
     return "planner"
 
 
@@ -188,12 +183,26 @@ def _make_input_validation_node(runtime: AgentRuntime):
 
 def _make_planner_node(runtime: AgentRuntime):
     def planner_node(state: CareerGraphState) -> dict[str, Any]:
-        # Only planner/feedback see chat transcripts; bounded by ``llm_history_max_tokens``.
+        # Planner sees bounded chat transcripts under ``llm_history_max_tokens``.
         msgs = messages_for_llm(state.get("messages"), runtime.settings)
         uid = (state.get("user_id") or "").strip() or None
+        fb_raw = (state.get("user_feedback") or "").strip()
+        tail: list[AnyMessage] = []
+        if fb_raw:
+            plan_blob = json.dumps(state.get("plan", {}), default=str)[:8000]
+            tail = [
+                SystemMessage(content=f"User dissatisfaction or correction:\n{fb_raw}"),
+                SystemMessage(
+                    content=(
+                        "Return to planning. Prior plan JSON (may revise, do not blindly repeat):\n"
+                        + plan_blob
+                        + "\nIncorporate the feedback above; set handoff to research only when ready."
+                    )
+                ),
+            ]
 
         def _fb(_exc: BaseException) -> dict[str, Any]:
-            return {
+            out: dict[str, Any] = {
                 "plan": PlannerAgentOutput(
                     handoff="user_clarify",
                     notes="Planning service error; ask the user to retry.",
@@ -201,13 +210,16 @@ def _make_planner_node(runtime: AgentRuntime):
                         "We couldn’t reach the planning service just now. "
                         "Please try again in a moment or shorten your question."
                     ),
-                ).model_dump()
+                ).model_dump(),
             }
+            if fb_raw:
+                out["user_feedback"] = ""
+            return out
 
         out = invoke_agent_with_resilience(
             lambda: _invoke_agent_graph(
                 PlannerAgent(runtime).graph,
-                _user_id_prefix(state) + msgs,
+                _user_id_prefix(state) + msgs + tail,
                 workflow_user_id=uid,
             ),
             step="planner",
@@ -220,7 +232,10 @@ def _make_planner_node(runtime: AgentRuntime):
                 notes="Structured planner output was missing; ask the user to restate their career goal.",
                 assistant_message="",
             )
-        return {"plan": parsed.model_dump()}
+        result: dict[str, Any] = {"plan": parsed.model_dump()}
+        if fb_raw:
+            result["user_feedback"] = ""
+        return result
 
     return planner_node
 
@@ -237,7 +252,14 @@ def _make_research_node(runtime: AgentRuntime):
         def _fb(_exc: BaseException) -> dict[str, Any]:
             return {
                 "research": ResearchAgentOutput(
-                    notes="Research tools or model were unavailable; later steps use limited market context.",
+                    research_report=(
+                        "Research could not be completed (tools or model unavailable). "
+                        "No independent market evidence was retrieved for this turn."
+                    ),
+                    open_questions=[
+                        "Re-run when services are healthy, or narrow the question so a lighter pass can succeed.",
+                    ],
+                    research_method_notes="Research tools or model were unavailable; later steps use limited market context.",
                 ).model_dump()
             }
 
@@ -271,6 +293,10 @@ def _make_analyst_node(runtime: AgentRuntime):
         def _fb(_exc: BaseException) -> dict[str, Any]:
             return {
                 "analysis": AnalystAgentOutput(
+                    analysis_report=(
+                        "Analysis step did not run; upstream research should be read cautiously without "
+                        "feasibility scoring from this agent."
+                    ),
                     notes="Analysis model was unavailable; critic and synthesis may be thinner than usual.",
                 ).model_dump()
             }
@@ -307,6 +333,10 @@ def _make_critic_node(runtime: AgentRuntime):
         def _fb(_exc: BaseException) -> dict[str, Any]:
             return {
                 "critique": CriticAgentOutput(
+                    critique_report=(
+                        "Critic pass did not run; analysis and research were not independently challenged "
+                        "before synthesis."
+                    ),
                     notes="Critic pass skipped (service unavailable); synthesis proceeds with unchallenged analysis.",
                 ).model_dump()
             }
@@ -340,7 +370,7 @@ def _make_synthesizer_node(runtime: AgentRuntime):
                     },
                     default=str,
                     indent=2,
-                )[:24000]
+                )[:56000]
             )
         ]
         uid = (state.get("user_id") or "").strip() or None
@@ -353,6 +383,7 @@ def _make_synthesizer_node(runtime: AgentRuntime):
             return {
                 "synthesis": SynthesizerAgentOutput(
                     recommendation=body,
+                    limitations_acknowledged="Synthesis service failed; prior pipeline JSON may still contain partial research and analysis.",
                     notes="Degraded response after synthesis failure.",
                 ).model_dump(),
                 "messages": [AIMessage(content=body)],
@@ -371,68 +402,22 @@ def _make_synthesizer_node(runtime: AgentRuntime):
         if parsed is None:
             return {"synthesis": {}, "messages": [AIMessage(content="I could not produce a final synthesis.")]}
         lines = [parsed.recommendation]
+        if (parsed.comparison_verdict or "").strip():
+            lines.append("\n### If you’re choosing between paths\n" + parsed.comparison_verdict.strip())
+        if parsed.immediate_next_steps:
+            lines.append("\n### Next steps (soon)\n" + "\n".join(f"- {x}" for x in parsed.immediate_next_steps))
+        if parsed.key_insights:
+            lines.append("\n### Key insights\n" + "\n".join(f"- {x}" for x in parsed.key_insights))
         for phase in parsed.roadmap:
             lines.append(f"\n## {phase.phase}\n" + "\n".join(f"- {a}" for a in phase.actions))
         if parsed.risks:
             lines.append("\n### Risks\n" + "\n".join(f"- {r}" for r in parsed.risks))
+        if (parsed.limitations_acknowledged or "").strip():
+            lines.append("\n### Caveats\n" + parsed.limitations_acknowledged.strip())
         body = "\n".join(lines).strip() or parsed.notes or "Here is your career summary."
         return {"synthesis": parsed.model_dump(), "messages": [AIMessage(content=body)]}
 
     return synthesizer_node
-
-
-def _make_feedback_node(runtime: AgentRuntime):
-    def feedback_node(state: CareerGraphState) -> dict[str, Any]:
-        # Chat history for reinterpretation; pipeline JSON is in ``ctx`` / state.
-        msgs = messages_for_llm(state.get("messages"), runtime.settings)
-        fb_raw = (state.get("user_feedback") or "").strip()
-        ctx = [SystemMessage(content=f"User dissatisfaction or correction:\n{fb_raw}")]
-        uid = (state.get("user_id") or "").strip() or None
-
-        def _fb(_exc: BaseException) -> dict[str, Any]:
-            re_plan = SystemMessage(
-                content=(
-                    "Return to planning. Prior plan JSON (may revise, do not blindly repeat):\n"
-                    + json.dumps(state.get("plan", {}), default=str)[:8000]
-                    + "\nFeedback agent was unavailable; incorporate the user’s feedback above manually."
-                )
-            )
-            return {
-                "feedback": FeedbackAgentOutput(
-                    adaptation_hints=[],
-                    notes="Feedback interpretation skipped (service error).",
-                ).model_dump(),
-                "user_feedback": "",
-                "messages": [re_plan],
-            }
-
-        out = invoke_agent_with_resilience(
-            lambda: _invoke_agent_graph(
-                FeedbackAgent(runtime).graph,
-                _user_id_prefix(state) + msgs + ctx,
-                workflow_user_id=uid,
-            ),
-            step="feedback",
-            fallback=_fb,
-        )
-        parsed = _structured(out, FeedbackAgentOutput)
-        hints = parsed.adaptation_hints if isinstance(parsed, FeedbackAgentOutput) else []
-        notes = parsed.notes if isinstance(parsed, FeedbackAgentOutput) else ""
-        re_plan = SystemMessage(
-            content=(
-                "Return to planning. Prior plan JSON (may revise, do not blindly repeat):\n"
-                + json.dumps(state.get("plan", {}), default=str)[:8000]
-                + "\nIncorporate the feedback above; set handoff to research only when ready."
-                f"\nAdaptation hints: {json.dumps(hints)}\nFeedback notes: {notes}"
-            )
-        )
-        return {
-            "feedback": parsed.model_dump() if parsed else {},
-            "user_feedback": "",
-            "messages": [re_plan],
-        }
-
-    return feedback_node
 
 
 def _compile_graph(runtime: AgentRuntime, checkpointer: Any) -> Any:
@@ -444,14 +429,13 @@ def _compile_graph(runtime: AgentRuntime, checkpointer: Any) -> Any:
     g.add_node("analyst", _make_analyst_node(runtime))
     g.add_node("critic", _make_critic_node(runtime))
     g.add_node("synthesizer", _make_synthesizer_node(runtime))
-    g.add_node("feedback", _make_feedback_node(runtime))
     g.add_node("user_handoff", _user_handoff_node)
 
     g.add_edge(START, "input_validation")
     g.add_conditional_edges(
         "input_validation",
         _route_after_input,
-        {"validation_fail": "validation_fail", "feedback": "feedback", "planner": "planner"},
+        {"validation_fail": "validation_fail", "planner": "planner"},
     )
     g.add_edge("validation_fail", END)
     g.add_conditional_edges(
@@ -464,7 +448,6 @@ def _compile_graph(runtime: AgentRuntime, checkpointer: Any) -> Any:
     g.add_edge("analyst", "critic")
     g.add_edge("critic", "synthesizer")
     g.add_edge("synthesizer", END)
-    g.add_edge("feedback", "planner")
 
     return g.compile(checkpointer=checkpointer)
 
@@ -548,7 +531,6 @@ def run_graph(
         "analysis": final_state.get("analysis"),
         "critique": final_state.get("critique"),
         "synthesis": final_state.get("synthesis"),
-        "feedback": final_state.get("feedback"),
     }
 
 
@@ -576,5 +558,4 @@ def run_graph_continue(
         "analysis": final_state.get("analysis"),
         "critique": final_state.get("critique"),
         "synthesis": final_state.get("synthesis"),
-        "feedback": final_state.get("feedback"),
     }

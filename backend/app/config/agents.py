@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-AgentName = Literal["planner", "research", "analyst", "critic", "synthesizer", "feedback"]
+AgentName = Literal["planner", "research", "analyst", "critic", "synthesizer"]
 ModelProvider = Literal["openai", "groq", "openrouter", "google"]
 
 
@@ -101,13 +101,6 @@ class AgentsConfig(BaseModel):
     synthesizer_fallback_model: str | None = None
     synthesizer_fallback_model_provider: ModelProvider | None = None
 
-    feedback_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
-    feedback_max_tokens: int = Field(default=4096, ge=1)
-    feedback_model: str = Field(default="gpt-4o-mini")
-    feedback_model_provider: ModelProvider = Field(default="openai")
-    feedback_fallback_model: str | None = None
-    feedback_fallback_model_provider: ModelProvider | None = None
-
     def _llm(self, role: AgentName) -> AgentLLMConfig:
         return AgentLLMConfig(
             temperature=getattr(self, f"{role}_temperature"),
@@ -137,7 +130,3 @@ class AgentsConfig(BaseModel):
     @property
     def synthesizer(self) -> AgentLLMConfig:
         return self._llm("synthesizer")
-
-    @property
-    def feedback(self) -> AgentLLMConfig:
-        return self._llm("feedback")

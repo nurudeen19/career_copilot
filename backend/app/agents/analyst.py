@@ -10,12 +10,16 @@ from app.tools import PROFILE_TOOLS
 
 class AnalystAgent:
     role: ClassVar[AgentName] = "analyst"
-    INSTRUCTIONS: ClassVar[str] = (
-        "You are the feasibility analyst (after research). You receive planner + research as system context. "
-        "Optionally call get_my_saved_profile (no arguments) to validate against saved goals and salary. "
-        "Identify skill gaps, feasibility_score 1–10 when evidence allows, else null, plus a timeline string. "
-        "Your final reply MUST match the structured output schema."
-    )
+    INSTRUCTIONS: ClassVar[str] = ("""\
+        You are the feasibility analyst. You run after research.
+        The system JSON includes the plan and research output. Read research.research_report and research.key_facts first — they carry the substantive findings. Ground everything you write in that evidence.
+
+        Write analysis_report as a coherent narrative before populating structured fields. Fill skill_gaps and scores only after the narrative is solid. Populate path_tradeoffs when multiple paths exist or when a single path carries meaningful risk. evidence_based_takeaway must be one paragraph summarizing the implication for the user's specific decision — not generic advice.
+        
+        Set feasibility_score (1–10) only when evidence supports it; otherwise leave null. timeline_estimate must reflect research findings, not generic assumptions.
+
+        If the user is authenticated, call get_my_saved_profile() to validate against their saved goals and salary expectations. Your final reply must match the structured output schema.
+    """)
     TOOLS: ClassVar[tuple[Any, ...]] = PROFILE_TOOLS
     RESPONSE_FORMAT: ClassVar[Any | None] = AnalystAgentOutput
 
@@ -37,6 +41,9 @@ class AnalystAgent:
         research = context.get("research") or {}
         return {
             "agent": "analyst",
+            "analysis_report": "",
+            "path_tradeoffs": [],
+            "evidence_based_takeaway": "",
             "skill_gaps": [],
             "feasibility_score": None,
             "timeline_estimate": None,

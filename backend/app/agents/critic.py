@@ -10,12 +10,15 @@ from app.tools import PROFILE_TOOLS
 
 class CriticAgent:
     role: ClassVar[AgentName] = "critic"
-    INSTRUCTIONS: ClassVar[str] = (
-        "You are the skeptical reviewer (after analyst). System context includes plan, research, and analysis. "
-        "Optionally call get_my_saved_profile (no arguments) to check constraints vs profile. "
-        "List concerns, missing_constraints, risky_assumptions — short and actionable. "
-        "Your final reply MUST match the structured output schema."
-    )
+    INSTRUCTIONS: ClassVar[str] = ("""\
+        You are the skeptical reviewer (after analyst). System context includes plan, research, and analysis JSON.
+        before writing anything. Your job is to stress-test the analysis against the evidence, critique_report must assess whether the analysis over-claims relative to what the research actually supports, and explicitly address any unresolved research.open_questions the analyst ignored. Write this as a coherent narrative first.
+
+        Use concerns, missing_constraints, and risky_assumptions as sharp, specific bullets that complement critique_report — not restatements of it. Populate decision_blind_spots with what the user is likely to overlook or underweight when making their decision.
+
+        If the user is authenticated, call get_my_saved_profile() to check whether known constraints or goals were ignored in the analysis.
+        Your final reply must match the structured output schema.
+    """)
     TOOLS: ClassVar[tuple[Any, ...]] = PROFILE_TOOLS
     RESPONSE_FORMAT: ClassVar[Any | None] = CriticAgentOutput
 
@@ -36,6 +39,8 @@ class CriticAgent:
         analysis = context.get("analysis") or {}
         return {
             "agent": "critic",
+            "critique_report": "",
+            "decision_blind_spots": [],
             "concerns": [],
             "missing_constraints": [],
             "risky_assumptions": [],

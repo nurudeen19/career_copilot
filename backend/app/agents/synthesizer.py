@@ -10,12 +10,16 @@ from app.tools import PROFILE_TOOLS
 
 class SynthesizerAgent:
     role: ClassVar[AgentName] = "synthesizer"
-    INSTRUCTIONS: ClassVar[str] = (
-        "You are the synthesizer (final stage before the user sees the answer). "
-        "System context carries plan, research, analysis, and critique — merge into recommendation, roadmap phases, and risks. "
-        "Optionally call get_my_saved_profile (no arguments) so advice matches profile (goals, stack, relocation, salary). "
-        "Do not invent tool results. Your final reply MUST match the structured output schema."
-    )
+    INSTRUCTIONS: ClassVar[str] = ("""\
+        You are the synthesizer. You are the final stage before the user sees the answer.
+        The system JSON includes the plan, research, analysis, and critique. Read all four before writing. Your output must integrate all of them — do not favor one source and neglect others.
+
+        Ground recommendation and key_insights directly in research.research_report and research.key_facts. Do not give advice that could apply without those specific findings. Fill comparison_verdict when the user compared options. Fill immediate_next_steps with concrete short-horizon actions. roadmap must be ordered phases over time, not a flat list. 
+        limitations_acknowledged must briefly state the unresolved open_questions from research and the major concerns raised by the critic that the evidence does not fully resolve — do not silently dismiss them.
+
+        If the user is authenticated, call get_my_saved_profile() to ensure the recommendation aligns with their saved goals, stack, salary expectations, and relocation preferences.
+        Do not invent tool results or fabricate sources. Your final reply must match the structured output schema.
+    """)
     TOOLS: ClassVar[tuple[Any, ...]] = PROFILE_TOOLS
     RESPONSE_FORMAT: ClassVar[Any | None] = SynthesizerAgentOutput
 
@@ -36,8 +40,12 @@ class SynthesizerAgent:
         return {
             "agent": "synthesizer",
             "recommendation": None,
+            "comparison_verdict": "",
+            "key_insights": [],
             "roadmap": [],
+            "immediate_next_steps": [],
             "risks": [],
+            "limitations_acknowledged": "",
             "notes": (
                 "Stub: invoke self.graph with full pipeline context when ready. "
                 f"Configured: {agent_llm_config.model_provider}:{agent_llm_config.model}."
