@@ -17,6 +17,7 @@ def test_settings_defaults_for_optional_keys() -> None:
     assert s.database_url is None
     assert s.log_level.upper() == "INFO"
     assert s.prompt_guard.model_id == "meta-llama/Llama-Prompt-Guard-2-86M"
+    assert s.prompt_guard.malicious_probability_threshold == 0.35
 
 
 def test_settings_jwt_secret_min_length() -> None:
