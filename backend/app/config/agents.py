@@ -67,35 +67,35 @@ class AgentsConfig(BaseModel):
     brave_search_api_key: str | None = None
 
     planner_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
-    planner_max_tokens: int = Field(default=4096, ge=1)
+    planner_max_tokens: int = Field(default=3000, ge=1)
     planner_model: str = Field(default="gpt-4o-mini")
     planner_model_provider: ModelProvider = Field(default="openai")
     planner_fallback_model: str | None = None
     planner_fallback_model_provider: ModelProvider | None = None
 
-    research_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
-    research_max_tokens: int = Field(default=4096, ge=1)
+    research_temperature: float = Field(default=0.5, ge=0.0, le=2.0)
+    research_max_tokens: int = Field(default=3000, ge=1)
     research_model: str = Field(default="gpt-4o-mini")
     research_model_provider: ModelProvider = Field(default="openai")
     research_fallback_model: str | None = None
     research_fallback_model_provider: ModelProvider | None = None
 
-    analyst_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
-    analyst_max_tokens: int = Field(default=4096, ge=1)
+    analyst_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+    analyst_max_tokens: int = Field(default=1000, ge=1)
     analyst_model: str = Field(default="gpt-4o-mini")
     analyst_model_provider: ModelProvider = Field(default="openai")
     analyst_fallback_model: str | None = None
     analyst_fallback_model_provider: ModelProvider | None = None
 
-    critic_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
-    critic_max_tokens: int = Field(default=4096, ge=1)
+    critic_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+    critic_max_tokens: int = Field(default=1000, ge=1)
     critic_model: str = Field(default="gpt-4o-mini")
     critic_model_provider: ModelProvider = Field(default="openai")
     critic_fallback_model: str | None = None
     critic_fallback_model_provider: ModelProvider | None = None
 
-    synthesizer_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
-    synthesizer_max_tokens: int = Field(default=4096, ge=1)
+    synthesizer_temperature: float = Field(default=0.5, ge=0.0, le=2.0)
+    synthesizer_max_tokens: int = Field(default=3000, ge=1)
     synthesizer_model: str = Field(default="gpt-4o-mini")
     synthesizer_model_provider: ModelProvider = Field(default="openai")
     synthesizer_fallback_model: str | None = None

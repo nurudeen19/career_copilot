@@ -1,68 +1,50 @@
 # Career Copilot
 
-Monorepo for a **chat-based career advisor**: research-backed guidance (planning → research → analysis → critique → synthesis), user profiles, and authenticated API access. The backend is a **FastAPI** service with a **LangGraph** workflow; the client is a **Vue 3** SPA.
+An **AI-powered career advisor** that provides research-backed guidance through a multi-agent workflow. Ask career questions, and get personalized advice by combining planning, research, analysis, critique, and synthesis stages.
 
-## Current status (April 2026)
+**Key features:**
+- 🤖 **Multi-agent workflow** — 5-stage orchestrated reasoning pipeline
+- 💾 **Resumable conversations** — Checkpointed state for interrupted sessions
+- 🔀 **Multiple LLM providers** — OpenAI, Groq, Google GenAI with fallback chains
+- 🛡️ **Safety first** — Llama Prompt Guard 2 for malicious prompt detection
+- 🚀 **Real-time streaming** — SSE-based live feedback as workflow progresses
+- 🔐 **Secure auth** — JWT tokens, user profiles, conversation history
 
-| Area | State |
-|------|--------|
-| **API** | Auth (JWT), profile CRUD, workflow **SSE** stream, health checks, rate limits, optional LangSmith tracing |
-| **Workflow** | Checkpointed LangGraph: validation → planner → (research \| user handoff) → analyst → critic → synthesizer; **thumbs-down** re-enters planner with a short marker + clarifying flow |
-| **LLM** | Per-agent provider keys (OpenAI, Groq, OpenRouter, Google); optional **primary + fallback** chain via LangChain `with_fallbacks` where supported |
-| **Guardrails** | Input size limits + **Llama Prompt Guard 2** (softmax P(malicious) vs threshold); `transformers` / `torch` are **optional extras** (`transformers-cpu` / `transformers-gpu`) — see `backend/README.md` |
-| **Persistence** | PostgreSQL (Alembic migrations) or SQLite for tests; LangGraph Postgres or SQLite checkpointer |
-| **Frontend** | Dashboard chat (workflow stream), profile modal, auth flows, markdown rendering |
-| **Deploy** | Multi-stage **`backend/Dockerfile`** (CPU torch index) suitable for Docker / Hugging Face Spaces; tuning continues separately |
+---
 
-Documentation for **why** things are built a certain way lives under **`docs/design-decisions/`**. **System shape and data flow** are summarized under **`docs/architecture/`**.
+## Quick Start
 
-## Repository layout
+### Prerequisites
 
-```
-career_copilot/
-├── backend/           # FastAPI app, LangGraph, agents, Alembic, Dockerfile
-│   ├── app/           # api/, agents/, config/, graph/, guardrails/, schema/, services/, tools/
-│   ├── database/      # Alembic versions
-│   ├── scripts/       # Migrations helpers, graph export, etc.
-│   ├── tests/
-│   ├── Dockerfile
-│   └── README.md      # Install extras, Docker, prompt guard
-├── frontend/          # Vue 3 + Vite + TypeScript
-├── docs/
-│   ├── design-decisions/   # ADRs and rationale (add files as you go)
-│   └── architecture/     # High-level diagrams and flow descriptions
-└── README.md          # This file
-```
+- Python 3.14+ (or 3.10+)
+- Node.js 22+
+- PostgreSQL or SQLite
 
-## Backend
-
-1. Copy `backend/.env.example` → `backend/.env` and set at least `DATABASE_URL`, `JWT_SECRET`, and LLM / search keys as needed.
-2. Install with **`pyproject.toml`** (prompt guard needs a **transformers** extra + CPU/GPU torch index — details in **`backend/README.md`**).
+### 1. Backend Setup
 
 ```bash
 cd backend
-python -m venv .venv
-# Windows:
-.\.venv\Scripts\Activate.ps1
-pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[transformers-cpu]"
+
+# Create environment file
+cp .env.example .env
+# Edit .env with DATABASE_URL, JWT_SECRET, and LLM API keys
+
+# Install dependencies
+uv sync --extra transformer-cpu  # CPU (smaller image)
+# or: uv sync --extra transformer-gpu  # GPU (CUDA 12.8)
+
+# Run migrations
+python scripts/run_migrations.py
+
+# Start server
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Run DB migrations when the schema changes (`backend/scripts/run_migrations.py` or Alembic per your ops).
+**API:** `http://127.0.0.1:8000`
+- **Docs:** `http://127.0.0.1:8000/docs`
+- **Info:** `GET http://127.0.0.1:8000/`
 
-**Docker / Spaces:** from `backend/`: `docker build -t career-copilot-backend .` — see `backend/README.md`.
-
-### Backend tests
-
-```bash
-cd backend
-uv sync --extra test --extra transformers-cpu
-uv run pytest tests/ -q
-```
-
-Tests use a temp SQLite DB and a FastAPI app **without** the full production lifespan (no prompt-guard model load on every test). Stubbed password hashing avoids heavy Argon2 work.
-
-## Frontend
+### 2. Frontend Setup
 
 ```bash
 cd frontend
@@ -70,15 +52,80 @@ npm install
 npm run dev
 ```
 
-Vite proxies `/api/*` to `http://127.0.0.1:8000` by default (`frontend/vite.config.ts`). Point `VITE_API_BASE_URL` at your API if needed. Ensure `CORS_ALLOW_ORIGINS` on the backend includes your dev origin (e.g. `http://localhost:5173`).
+**Frontend:** `http://localhost:5173`
+
+## Project Structure
+
+```
+career_copilot/
+├── backend/              # FastAPI, LangGraph, agents, database
+├── frontend/             # Vue 3 SPA, TypeScript
+├── docs/
+│   ├── architecture.md   # System design and data flows
+│   └── design-decisions.md # Architecture Decision Records (ADRs)
+└── README.md             # This file
+```
+
+---
 
 ## Documentation
 
-| Path | Purpose |
-|------|--------|
-| [`docs/design-decisions/`](docs/design-decisions/) | Record of product/engineering choices (ADRs, trade-offs, rejected options). |
-| [`docs/architecture/`](docs/architecture/) | How components connect: graph, agents, auth, streaming, data stores. |
+- **[Architecture](docs/architecture.md)** — System design, components, data flow
+- **[Design Decisions](docs/design-decisions.md)** — Why we built it this way (ADRs)
+- **[Backend README](backend/README.md)** — Setup, guardrails, dependency management
+- **[Frontend README](frontend/README.md)** — Development, build, deployment
 
-## License / contributing
+---
 
-Add a `LICENSE` and contribution guidelines when you open the repo publicly.
+## Configuration
+
+Required environment variables:
+
+```bash
+DATABASE_URL=postgresql://user:pass@localhost/career_copilot
+JWT_SECRET=your-jwt-secret-here
+
+# LLM Keys (use one or multiple)
+OPENAI_API_KEY=sk-...
+GROQ_API_KEY=...
+GOOGLE_API_KEY=...
+
+# Other Keys
+TAVILY_API_KEY=...              # Web search
+BRAVESEARCH_API_KEY=...
+LANGSMITH_API_KEY=...           # Tracing
+CORS_ALLOW_ORIGINS=http://localhost:5173
+```
+
+Full `.env.example` in `backend/`.
+
+---
+
+## Key Technologies
+
+| Layer | Stack |
+|-------|-------|
+| **Frontend** | Vue 3, TypeScript, Vite, Pinia |
+| **Backend** | FastAPI, uvicorn, SQLAlchemy async |
+| **AI/ML** | LangGraph, LangChain, Transformers, PyTorch |
+| **Database** | PostgreSQL/SQLite, Alembic |
+| **Deployment** | Docker (multi-stage -> huggingface), uv |
+
+---
+
+## Testing
+
+```bash
+cd backend
+uv sync --extra transformer-cpu --extra test
+uv run pytest tests/ -v
+```
+
+---
+
+## License
+
+MIT License — see [`LICENSE`](LICENSE)
+
+---
+
