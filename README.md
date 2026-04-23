@@ -8,7 +8,6 @@ pinned: false
 short_description: AI-powered Career Decision Support
 ---
 
-Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
 # Career Copilot
 
 An **AI-powered career advisor** that provides research-backed guidance through a multi-agent workflow. Ask career questions, and get personalized advice by combining planning, research, analysis, critique, and synthesis stages.
