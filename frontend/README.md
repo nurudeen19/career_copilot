@@ -1,48 +1,179 @@
-# frontend
+# Frontend
 
-This template should help get you started developing with Vue 3 in Vite.
+Vue 3 + Vite single-page application for Career Copilot. Real-time workflow streaming with Pinia state management.
 
-## Recommended IDE Setup
+## Quick Start
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+### Prerequisites
 
-## Recommended Browser Setup
+- Node.js 24+ with npm/pnpm
+- Backend running on `localhost:8000` (or configure proxy)
 
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
+### Setup
 
-## Type Support for `.vue` Imports in TS
+```bash
+cd frontend
 
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
-
-```sh
+# 1. Install dependencies
 npm install
-```
 
-### Compile and Hot-Reload for Development
-
-```sh
+# 2. Start development server
 npm run dev
 ```
 
-### Type-Check, Compile and Minify for Production
+**Application available at:**
+- **Dev Server:** http://127.0.0.1:5173
+- **Hot Module Reload (HMR):** Automatic on file save
 
-```sh
-npm run build
+---
+
+## Configuration
+
+### API Proxy
+
+Development proxy configured in `vite.config.ts`:
+
+```typescript
+server: {
+  proxy: {
+    '/api': {
+      target: 'http://127.0.0.1:8000',
+      changeOrigin: true,
+    }
+  }
+}
 ```
 
-### Lint with [ESLint](https://eslint.org/)
+**Environment-specific:**
+- **Development:** `http://127.0.0.1:8000`
+- **Production:** Configure via `VITE_API_URL` in `.env`
 
-```sh
-npm run lint
+### Environment Variables
+
+Create `.env.local`:
+```bash
+VITE_API_URL=http://localhost:8000
+VITE_LOG_LEVEL=debug  # or 'info', 'warn', 'error'
 ```
+
+Build-time variables (define in `.env`, use as `import.meta.env.*`):
+```bash
+VITE_API_URL=...      # Auto-prefixed with VITE_
+VITE_APP_VERSION=0.1.0
+```
+
+---
+
+## Project Structure
+
+```
+frontend/
+├── src/
+│   ├── App.vue                 # Root component
+│   ├── main.ts                 # Vite entry point
+│   ├── env.d.ts               # TypeScript env types
+│   │
+│   ├── components/
+│   │   ├── ChatMessage.vue     # Single message display
+│   │   ├── ChatInput.vue       # Message input field
+│   │   ├── WorkflowStages.vue  # Stage indicators
+│   │   ├── ProfileCard.vue     # User profile display
+│   │   └── ... (other components)
+│   │
+│   ├── views/
+│   │   ├── ChatView.vue        # Main chat interface
+│   │   ├── ProfileView.vue     # User profile page
+│   │   ├── AuthView.vue        # Login/register
+│   │   └── DashboardView.vue   # Dashboard
+│   │
+│   ├── router/
+│   │   └── index.ts            # Vue Router setup
+│   │
+│   ├── stores/                 # Pinia state management
+│   │   ├── auth.ts             # Authentication state
+│   │   ├── chat.ts             # Chat/workflow state
+│   │   ├── profile.ts          # User profile state
+│   │   └── ui.ts               # UI state (theme, etc.)
+│   │
+│   ├── composables/
+│   │   ├── useAuth.ts          # Auth composition
+│   │   ├── useChat.ts          # Chat logic
+│   │   ├── useEventStream.ts   # SSE streaming
+│   │   └── ... (other composables)
+│   │
+│   ├── api/
+│   │   ├── client.ts           # Axios client setup
+│   │   ├── auth.ts             # Auth API calls
+│   │   ├── chat.ts             # Chat/workflow API
+│   │   ├── profile.ts          # Profile API
+│   │   └── health.ts           # Health check
+│   │
+│   ├── types/
+│   │   ├── auth.ts             # Auth types
+│   │   ├── chat.ts             # Chat types
+│   │   ├── workflow.ts         # Workflow types
+│   │   └── ... (other types)
+│   │
+│   ├── utils/
+│   │   ├── token.ts            # JWT token helpers
+│   │   ├── format.ts           # Formatting utilities
+│   │   ├── api.ts              # API error handling
+│   │   └── ... (other utilities)
+│   │
+│   ├── assets/
+│   │   ├── logo.svg
+│   │   └── ... (static assets)
+│   │
+│   └── styles/
+│       ├── global.css          # Global styles
+│       ├── variables.css       # CSS variables
+│       └── ... (component styles)
+│
+├── public/                     # Static files (copied to root on build)
+│
+├── index.html                  # HTML entry point
+├── tsconfig.json               # TypeScript config
+├── tsconfig.app.json           # App TypeScript config
+├── tsconfig.node.json          # Node TypeScript config
+├── vite.config.ts              # Vite configuration
+├── eslint.config.ts            # ESLint configuration
+├── env.d.ts                    # Environment type definitions
+├── package.json
+└── README.md                   # This file
+```
+
+---
+
+## Development
+
+### Scripts
+
+```bash
+npm run dev       # Start dev server with HMR
+npm run build     # Production build
+npm run preview   # Preview production build
+npm run lint      # Run ESLint
+npm run type-check # Run TypeScript type check
+```
+
+### Hot Module Reload (HMR)
+
+Changes to `.vue`, `.ts`, or `.css` files automatically reload in browser without losing state.
+
+### Type Checking
+
+```bash
+npm run type-check  # Check TypeScript errors
+npm run lint        # Check ESLint + format
+```
+
+
+## References
+
+- [Vue 3 Docs](https://vuejs.org/)
+- [Vite Docs](https://vitejs.dev/)
+- [Pinia Docs](https://pinia.vuejs.org/)
+- [Vue Router Docs](https://router.vuejs.org/)
+- [TypeScript Vue Plugin](https://github.com/johnsoncodehk/volar)
+- [Architecture Guide](../docs/architecture.md)
+- [Backend API](../backend/README.md)
