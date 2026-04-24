@@ -82,3 +82,8 @@ export async function apiFetch<T>(
   if (ct?.includes('application/json')) return (await res.json()) as T
   return (await res.text()) as T
 }
+
+export async function deleteWorkflowThread(threadId: string): Promise<void> {
+  const id = encodeURIComponent(threadId)
+  await apiFetch<void>(`/workflow/thread/${id}`, { method: 'DELETE' })
+}

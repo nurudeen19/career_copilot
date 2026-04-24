@@ -7,7 +7,7 @@ from typing import Any
 
 from app.config.settings import get_settings
 from app.core.logging_config import configure_logging
-from app.db.session import configure_engine, dispose_engine, ping
+from app.db.session import configure_engine, configure_pool, dispose_engine, dispose_pool, ping
 from app.graph.checkpoint import dispose_checkpointer, get_checkpointer
 from app.guardrails import setup_guardrails, teardown_guardrails
 
@@ -57,16 +57,18 @@ def _configure_langsmith() -> None:
 
 
 def init_app() -> None:
-    """Load settings, LangSmith client, DB engine, and prompt-guard model (one-time)."""
+    """Load settings, LangSmith client, shared DB pool, SQLAlchemy engine, guardrails, and checkpointer (one-time)."""
     settings = get_settings()
     configure_logging(settings)
     _log.info("init_app: configuring LangSmith from settings")
     _configure_langsmith()
-    _log.info("init_app: configuring SQLAlchemy engine")
+    _log.info("init_app: initializing shared connection pool")
+    configure_pool(settings.database_url)
+    _log.info("init_app: configuring SQLAlchemy engine (using shared pool)")
     configure_engine(settings.database_url)
     _log.info("init_app: loading prompt guard (%s)", settings.prompt_guard.model_id)
     setup_guardrails(settings)
-    _log.info("init_app: LangGraph checkpointer (Postgres migrations or SQLite file)")
+    _log.info("init_app: LangGraph checkpointer (using shared pool)")
     get_checkpointer(settings)
     _log.info("init_app: finished")
 
@@ -82,13 +84,15 @@ def verify_database_connection() -> None:
 
 
 def shutdown_app() -> None:
-    """Release database connections, checkpoint pool, unload guardrails, flush LangSmith."""
+    """Release database connections, checkpoint pool, guardrails, and flush LangSmith."""
     _log.info("shutdown_app: unloading guardrails")
     teardown_guardrails()
     _log.info("shutdown_app: disposing LangGraph checkpointer")
     dispose_checkpointer()
-    _log.info("shutdown_app: disposing database engine")
+    _log.info("shutdown_app: disposing database engine (release pool checkouts)")
     dispose_engine()
+    _log.info("shutdown_app: disposing shared connection pool")
+    dispose_pool()
     try:
         from langchain_core.tracers.langchain import wait_for_all_tracers
 
