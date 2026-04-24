@@ -17,13 +17,6 @@ from app.core.request_logging import RequestLoggingMiddleware
 _lifecycle_log = logging.getLogger("app.lifecycle")
 
 
-def _cors_allow_origins(raw: str) -> list[str]:
-    s = (raw or "").strip()
-    if s == "*":
-        return ["*"]
-    return [x.strip() for x in s.split(",") if x.strip()]
-
-
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     settings = get_settings()
@@ -55,12 +48,13 @@ def create_app() -> FastAPI:
     _lifecycle_log.info("Creating FastAPI app=%r debug=%s", settings.app_name, settings.debug)
     application = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=lifespan)
     install_rate_limits(application)
-    origins = _cors_allow_origins(settings.cors_allow_origins)
-    if origins:
+    if settings.cors_allow_origins:
+        # Parse CSV origins string into list
+        origins = [x.strip() for x in settings.cors_allow_origins.split(",") if x.strip()]
         application.add_middleware(
             CORSMiddleware,
             allow_origins=origins,
-            allow_credentials=False if origins == ["*"] else True,
+            allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
         )
