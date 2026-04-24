@@ -58,6 +58,7 @@ def sqlite_database(monkeypatch: pytest.MonkeyPatch, tmp_path) -> str:
     # Import models so tables register on Base.metadata
     import app.models.user  # noqa: F401
     import app.models.user_profile  # noqa: F401
+    import app.models.workflow_thread  # noqa: F401
 
     Base.metadata.create_all(bind=get_engine())
     return url

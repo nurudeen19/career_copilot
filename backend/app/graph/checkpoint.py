@@ -1,7 +1,9 @@
-"""LangGraph checkpointer: Postgres when DATABASE_URL is set, else SQLite file.
+"""LangGraph checkpointer: auto-detects Postgres or SQLite.
 
-Call :func:`get_checkpointer` during API startup (see ``init_app``) so migrations run
-before the first workflow request; the graph still calls ``get_checkpointer`` for the same singleton.
+ARCHITECTURE: Gets the shared connection pool from app.db.session.
+- The pool is initialized and managed by session.py (single source of truth for DB)
+- This module auto-detects DB type and uses appropriate checkpointer
+- Intelligently adapts without forcing a single type
 """
 
 from __future__ import annotations
@@ -11,17 +13,10 @@ from pathlib import Path
 from typing import Any
 
 from app.config.settings import Settings, get_settings
+from app.db.session import detect_database_type, get_pool
 
-_pool: Any | None = None
 _sqlite_conn: sqlite3.Connection | None = None
 _saver: Any | None = None
-
-
-def _normalize_postgres_conninfo(url: str) -> str:
-    """psycopg pool expects a libpq URI, not SQLAlchemy's ``+psycopg`` dialect prefix."""
-    if url.startswith("postgresql+psycopg://"):
-        return "postgresql://" + url.removeprefix("postgresql+psycopg://")
-    return url
 
 
 def _patch_langgraph_postgres_index_migrations() -> None:
@@ -35,26 +30,34 @@ def _patch_langgraph_postgres_index_migrations() -> None:
 
 
 def get_checkpointer(settings: Settings | None = None) -> Any:
-    """Return the process-wide checkpointer, creating the pool and running ``setup()`` on first call."""
-    global _pool, _sqlite_conn, _saver
+    """Return the process-wide checkpointer, auto-detecting database type.
+
+    Postgres: Uses the shared pool from app.db.session.get_pool().
+    SQLite: Creates a local file connection.
+    
+    Intelligently adapts based on DATABASE_URL without forcing a single type.
+    """
+    global _sqlite_conn, _saver
     if _saver is not None:
         return _saver
 
     s = settings or get_settings()
-    if s.database_url:
+    db_type = detect_database_type(s.database_url)
+
+    if db_type == "postgres":
         from langgraph.checkpoint.postgres import PostgresSaver
-        from psycopg_pool import ConnectionPool
 
         _patch_langgraph_postgres_index_migrations()
-        _pool = ConnectionPool(
-            conninfo=_normalize_postgres_conninfo(s.database_url),
-            open=True,
-            max_size=5,
-        )
-        _saver = PostgresSaver(_pool)
+        # Get the shared pool from session module
+        pool = get_pool()
+        if pool is None:
+            msg = "Postgres pool not initialized. Call session.configure_pool() during app startup."
+            raise RuntimeError(msg)
+        _saver = PostgresSaver(pool)
         _saver.setup()
         return _saver
 
+    # SQLite or no URL: use local file checkpoint
     from langgraph.checkpoint.sqlite import SqliteSaver
 
     path = Path(s.workflow.graph_checkpoint_sqlite_path)
@@ -64,12 +67,15 @@ def get_checkpointer(settings: Settings | None = None) -> Any:
     return _saver
 
 
+def delete_thread_checkpoints(thread_id: str, settings: Settings | None = None) -> None:
+    """Remove all LangGraph checkpoints for ``thread_id`` (Postgres or SQLite saver)."""
+    saver = get_checkpointer(settings)
+    saver.delete_thread(thread_id)
+
+
 def dispose_checkpointer() -> None:
-    """Close pool / sqlite connection when resetting runtime."""
-    global _pool, _sqlite_conn, _saver
-    if _pool is not None:
-        _pool.close()
-        _pool = None
+    """Close checkpointer and SQLite connection only (pool is managed by session module)."""
+    global _sqlite_conn, _saver
     if _sqlite_conn is not None:
         _sqlite_conn.close()
         _sqlite_conn = None

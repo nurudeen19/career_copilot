@@ -6,6 +6,7 @@ import {
   extractAssistantTextFromPatch,
   extractValidationError,
 } from '@/composables/useWorkflowStream'
+import { ApiError, deleteWorkflowThread } from '@/api/client'
 import { renderSafeMarkdown } from '@/utils/safeMarkdown'
 
 export type ChatMessage = {
@@ -195,8 +196,18 @@ function loadPersistedState() {
   messages.value = createWelcomeMessages()
 }
 
-function clearConversation() {
+async function clearConversation() {
   if (streaming.value) return
+  const tid = threadId.value
+  if (tid) {
+    try {
+      await deleteWorkflowThread(tid)
+    } catch (e) {
+      error.value =
+        e instanceof ApiError ? e.detail : 'Could not clear this conversation on the server. Try again.'
+      return
+    }
+  }
   try {
     sessionStorage.removeItem(CHAT_STATE_KEY)
     sessionStorage.removeItem(THREAD_KEY)
@@ -441,8 +452,8 @@ function onKeydown(e: KeyboardEvent) {
           type="button"
           class="new-chat cc-btn cc-btn--ghost"
           :disabled="streaming"
-          title="Clear this chat and start a new thread on the server"
-          @click="clearConversation()"
+          title="Remove this conversation from the server and clear the chat"
+          @click="void clearConversation()"
         >
           New chat
         </button>

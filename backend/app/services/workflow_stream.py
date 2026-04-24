@@ -19,6 +19,7 @@ from app.core.retry_policy import is_transient_workflow_error
 from app.graph.career_graph import stream_graph_updates
 from app.models.user import User
 from app.schema.workflow import WorkflowStreamRequest
+from app.services.workflow_thread import register_workflow_thread
 
 _log = logging.getLogger("app.workflow")
 
@@ -60,6 +61,7 @@ def iter_workflow_sse(
     body: WorkflowStreamRequest,
     user: User,
     *,
+    tid: str | None = None,
     runtime: AgentRuntime | None = None,
     max_stream_attempts: int = 2,
 ) -> Iterator[str]:
@@ -69,46 +71,46 @@ def iter_workflow_sse(
     Retries only before any chunk is emitted (``max_stream_attempts`` defaults to 2).
     """
     rt = runtime or get_agent_runtime()
-    tid = str(body.thread_id) if body.thread_id else str(uuid.uuid4())
+    run_tid = tid if tid is not None else (str(body.thread_id) if body.thread_id else str(uuid.uuid4()))
     initial = build_workflow_initial_state(body, user)
 
     attempt = 0
     while attempt < max_stream_attempts:
         emitted = False
         try:
-            for update in stream_graph_updates(initial, thread_id=tid, runtime=rt):
+            for update in stream_graph_updates(initial, thread_id=run_tid, runtime=rt):
                 emitted = True
                 if not isinstance(update, dict):
-                    yield _sse_line({"thread_id": tid, "step": "_", "patch": _serialize_value(update)})
+                    yield _sse_line({"thread_id": run_tid, "step": "_", "patch": _serialize_value(update)})
                     continue
                 for step, patch in update.items():
                     yield _sse_line(
                         {
-                            "thread_id": tid,
+                            "thread_id": run_tid,
                             "step": step,
                             "patch": _serialize_value(patch),
                         }
                     )
-            yield _sse_line({"event": "done", "thread_id": tid})
+            yield _sse_line({"event": "done", "thread_id": run_tid})
             return
         except Exception as exc:  # noqa: BLE001
             if emitted or not is_transient_workflow_error(exc):
-                yield _sse_line({"event": "error", "thread_id": tid, "detail": str(exc)})
+                yield _sse_line({"event": "error", "thread_id": run_tid, "detail": str(exc)})
                 return
             attempt += 1
             if attempt >= max_stream_attempts:
                 _log.warning(
                     "workflow_stream_giving_up thread_id=%s attempts=%s detail=%s",
-                    tid,
+                    run_tid,
                     attempt,
                     exc,
                 )
-                yield _sse_line({"event": "error", "thread_id": tid, "detail": str(exc)})
+                yield _sse_line({"event": "error", "thread_id": run_tid, "detail": str(exc)})
                 return
             delay = min(8.0, 0.5 * (2 ** (attempt - 1)))
             _log.warning(
                 "workflow_stream_retry thread_id=%s attempt=%s/%s sleep_s=%.2f detail=%s",
-                tid,
+                run_tid,
                 attempt,
                 max_stream_attempts,
                 delay,
@@ -123,9 +125,16 @@ def _sse_producer(
     user: User,
     runtime: AgentRuntime | None,
     max_stream_attempts: int,
+    tid: str,
 ) -> None:
     try:
-        for line in iter_workflow_sse(body, user, runtime=runtime, max_stream_attempts=max_stream_attempts):
+        for line in iter_workflow_sse(
+            body,
+            user,
+            tid=tid,
+            runtime=runtime,
+            max_stream_attempts=max_stream_attempts,
+        ):
             q.put(line)
     except Exception as exc:  # noqa: BLE001
         q.put(exc)
@@ -145,11 +154,12 @@ async def aiter_workflow_sse(
     user binding stays consistent, while the event loop awaits queue gets without blocking between chunks.
     """
     tid = str(body.thread_id) if body.thread_id else str(uuid.uuid4())
+    register_workflow_thread(user_id=user.id, thread_id=tid)
     _log.info("workflow_stream_start user_id=%s thread_id=%s", user.id, tid)
     q: queue.Queue[Any] = queue.Queue()
     worker = threading.Thread(
         target=_sse_producer,
-        args=(q, body, user, runtime, max_stream_attempts),
+        args=(q, body, user, runtime, max_stream_attempts, tid),
         name="workflow-sse",
         daemon=True,
     )

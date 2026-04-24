@@ -18,3 +18,4 @@ backend/graphs/
 backend/logs/
 .vscode/
 frontend/.vscode/
+.cursor/

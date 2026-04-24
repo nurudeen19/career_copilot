@@ -6,6 +6,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from app.config.settings import get_settings
+from app.db.session import detect_database_type, normalize_postgres_sqlalchemy_url
 from app.models import Base
 
 config = context.config
@@ -20,6 +21,8 @@ def _database_url() -> str:
     if not url:
         msg = "DATABASE_URL must be set to run Alembic migrations."
         raise RuntimeError(msg)
+    if detect_database_type(url) == "postgres":
+        return normalize_postgres_sqlalchemy_url(url)
     return url
 
 
