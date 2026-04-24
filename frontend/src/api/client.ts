@@ -2,9 +2,7 @@ const STORAGE_KEY = 'career_copilot_token'
 
 export function apiBase(): string {
   const env = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '')
-  if (env) return env
-  if (import.meta.env.DEV) return '/api'
-  return ''
+  return env || 'http://127.0.0.1:8000'
 }
 
 export function getStoredToken(): string | null {
