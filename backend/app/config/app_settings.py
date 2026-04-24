@@ -21,6 +21,7 @@ class AppSettings(BaseModel):
     log_file_dir: str = Field(default_factory=default_log_file_dir)
     cors_allow_origins: str = Field(
         default="http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173",
+        validation_alias="CORS_ALLOW_ORIGINS",
     )
     database_url: str | None = None
     jwt_secret: str = Field(default="change-me", min_length=8)
