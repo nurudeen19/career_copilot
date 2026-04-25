@@ -178,6 +178,7 @@ def _route_after_input(state: CareerGraphState) -> Literal["validation_fail", "p
 
 
 def _route_after_planner(state: CareerGraphState) -> Literal["research", "user_handoff"]:
+    """Branch on the planner's ``handoff`` only (set by the model via structured output)."""
     plan = state.get("plan") or {}
     if plan.get("handoff") == "research":
         return "research"
@@ -187,6 +188,8 @@ def _route_after_planner(state: CareerGraphState) -> Literal["research", "user_h
 def _user_handoff_node(state: CareerGraphState) -> dict[str, Any]:
     plan = state.get("plan") or {}
     text = (plan.get("assistant_message") or "").strip()
+    if not text:
+        text = "Could you share a specific career question you want help with?"
     return {"messages": [AIMessage(content=text)]}
 
 

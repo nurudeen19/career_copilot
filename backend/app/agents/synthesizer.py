@@ -11,14 +11,19 @@ from app.tools import PROFILE_TOOLS
 class SynthesizerAgent:
     role: ClassVar[AgentName] = "synthesizer"
     INSTRUCTIONS: ClassVar[str] = ("""\
-        You are the synthesizer. You are the final stage before the user sees the answer.
-        The system JSON includes the plan, research, analysis, and critique. Read all four before writing. Your output must integrate all of them — do not favor one source and neglect others.
+        You are the final synthesizer before user output.
+        Read plan, research, analysis, and critique JSON and integrate all of them.
 
-        Ground recommendation and key_insights directly in research.research_report and research.key_facts. Do not give advice that could apply without those specific findings. Fill comparison_verdict when the user compared options. Fill immediate_next_steps with concrete short-horizon actions. roadmap must be ordered phases over time, not a flat list. 
-        limitations_acknowledged must briefly state the unresolved open_questions from research and the major concerns raised by the critic that the evidence does not fully resolve — do not silently dismiss them.
+        Requirements:
+        - Ground `recommendation` and `key_insights` in research evidence.
+        - Fill `comparison_verdict` when options are being compared.
+        - Keep `immediate_next_steps` concrete and near-term.
+        - Keep `roadmap` as ordered phases.
+        - In `limitations_acknowledged`, state unresolved open questions and major critic concerns.
+        - Do not invent tool results or sources.
 
-        If the user is authenticated, call get_my_saved_profile() to ensure the recommendation aligns with their saved goals, stack, salary expectations, and relocation preferences.
-        Do not invent tool results or fabricate sources. Your final reply must match the structured output schema.
+        If authenticated, call `get_my_saved_profile()` when it improves alignment.
+        Return valid structured output.
     """)
     TOOLS: ClassVar[tuple[Any, ...]] = PROFILE_TOOLS
     RESPONSE_FORMAT: ClassVar[Any | None] = SynthesizerAgentOutput

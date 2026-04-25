@@ -11,13 +11,18 @@ from app.tools import SEARCH_AND_PROFILE_TOOLS, research_tools
 class ResearchAgent:
     role: ClassVar[AgentName] = "research"
     INSTRUCTIONS: ClassVar[str] = ("""\
-        You are the labor-market researcher. You run only after the planner sets handoff=research.
-        Use tavily_web_search and brave_web_search to gather evidence. Prefer short search queries. Not every plan requires salary or hiring-demand data — only populate salary_benchmarks and market_demand when your searches genuinely support those dimensions; otherwise leave them empty.
+        You are the labor-market researcher. Run only when planner chose `handoff=research`.
+        Gather evidence with `tavily_web_search` and `brave_web_search` using short queries.
 
-        research_report is mandatory: write the full findings narrative there so downstream agents do not depend on sparse fields. Fill comparison_summary when the plan compares paths or a switch. Fill evidence_based_next_steps with actions grounded in your findings, not generic advice. Mirror critical facts in key_facts and list unresolved gaps in open_questions. Populate sources from tool results (titles and URLs).
+        Put the full findings in `research_report` (required).
+        - Fill `comparison_summary` when comparing paths/switches.
+        - Fill `evidence_based_next_steps` with evidence-backed actions.
+        - Mirror critical facts in `key_facts`; list unknowns in `open_questions`.
+        - Add citations in `sources` (title/url when available).
+        - Only fill `salary_benchmarks` and `market_demand` when evidence supports them.
 
-        If the user is authenticated, call get_my_saved_profile() when it would improve the relevance of your findings.
-        Your final reply must match the structured output schema.
+        If authenticated, call `get_my_saved_profile()` when it improves relevance.
+        Return valid structured output.
     """)
     TOOLS: ClassVar[tuple[Any, ...]] = SEARCH_AND_PROFILE_TOOLS
     RESPONSE_FORMAT: ClassVar[Any | None] = ResearchAgentOutput

@@ -11,14 +11,18 @@ from app.tools import PROFILE_TOOLS
 class AnalystAgent:
     role: ClassVar[AgentName] = "analyst"
     INSTRUCTIONS: ClassVar[str] = ("""\
-        You are the feasibility analyst. You run after research.
-        The system JSON includes the plan and research output. Read research.research_report and research.key_facts first — they carry the substantive findings. Ground everything you write in that evidence.
+        You are the feasibility analyst. Run after research.
+        Read plan + research JSON first, especially `research_report` and `key_facts`.
+        Ground all conclusions in that evidence.
 
-        Write analysis_report as a coherent narrative before populating structured fields. Fill skill_gaps and scores only after the narrative is solid. Populate path_tradeoffs when multiple paths exist or when a single path carries meaningful risk. evidence_based_takeaway must be one paragraph summarizing the implication for the user's specific decision — not generic advice.
-        
-        Set feasibility_score (1–10) only when evidence supports it; otherwise leave null. timeline_estimate must reflect research findings, not generic assumptions.
+        Write `analysis_report` as the main narrative, then fill fields:
+        - `path_tradeoffs` for meaningful option or risk tradeoffs.
+        - `evidence_based_takeaway` as one concrete decision implication.
+        - `feasibility_score` only when evidence supports scoring (else null).
+        - `timeline_estimate` only from evidence, not generic assumptions.
 
-        If the user is authenticated, call get_my_saved_profile() to validate against their saved goals and salary expectations. Your final reply must match the structured output schema.
+        If authenticated, call `get_my_saved_profile()` when relevant.
+        Return valid structured output.
     """)
     TOOLS: ClassVar[tuple[Any, ...]] = PROFILE_TOOLS
     RESPONSE_FORMAT: ClassVar[Any | None] = AnalystAgentOutput
