@@ -101,16 +101,18 @@ backend/
 │   │
 │   ├── agents/                 # LangGraph agent nodes
 │   │   ├── planner.py
-│   │   ├── researcher.py
+│   │   ├── research.py
 │   │   ├── analyst.py
 │   │   ├── critic.py
 │   │   └── synthesizer.py
 │   │
 │   ├── graph/
-│   │   ├── career_graph.py     # LangGraph workflow definition
+│   │   ├── career_graph.py     # Compatibility exports (public graph API)
+│   │   ├── career_graph_builder.py  # Graph assembly + compile caching
+│   │   ├── career_graph_nodes.py    # State type + node/route factories
+│   │   ├── career_graph_runner.py   # Runtime invoke/stream helpers
 │   │   ├── checkpoint.py       # Checkpoint management
 │   │   ├── message_history.py
-│   │   ├── feedback_markers.py
 │   │   └── agent_invoke.py
 │   │
 │   ├── guardrails/
@@ -189,6 +191,15 @@ backend/
 ├── alembic.ini                 # Alembic config
 └── README.md                   # This file
 ```
+
+### Graph Module Layout
+
+The workflow graph is intentionally split for readability:
+
+- `app/graph/career_graph_nodes.py` defines `CareerGraphState`, node factories, and routing functions.
+- `app/graph/career_graph_builder.py` wires nodes/edges and owns compiled-graph cache/reset behavior.
+- `app/graph/career_graph_runner.py` handles invoke/stream runtime paths and tracing metadata.
+- `app/graph/career_graph.py` is a thin compatibility layer that re-exports the public API.
 
 ---
 
