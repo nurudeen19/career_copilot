@@ -18,12 +18,12 @@ class PromptGuardSettings(BaseModel):
     )
     device: int = Field(default=-1, validation_alias=AliasChoices("PROMPT_GUARD_DEVICE"))
     malicious_probability_threshold: float = Field(
-        default=0.35,
+        default=0.15,
         ge=0.0,
         le=1.0,
         validation_alias=AliasChoices("PROMPT_GUARD_MALICIOUS_THRESHOLD"),
         description=(
             "Block when softmax P(malicious) ≥ this value (see Meta llama-cookbook prompt_guard inference.py). "
-            "Lower = stricter (more false positives). Default 0.35 catches many borderline injections."
+            "Lower = stricter (more false positives). Default 0.15 catches many borderline injections."
         ),
     )

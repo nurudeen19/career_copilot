@@ -23,7 +23,7 @@ def main() -> int:
     if str(BACKEND_ROOT) not in sys.path:
         sys.path.insert(0, str(BACKEND_ROOT))
 
-    from app.graph.career_graph import compile_career_graph_for_visualization
+    from app.graph.career_graph_builder import compile_career_graph_for_visualization
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     app = compile_career_graph_for_visualization()

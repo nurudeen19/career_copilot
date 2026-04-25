@@ -10,7 +10,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from app.config.settings import get_settings
 from app.core.bootstrap import init_app
 from app.graph import build_graph, run_graph
-from app.graph.career_graph import invoke_career_graph
+from app.graph.career_graph_runner import invoke_career_graph
 
 
 def run_turn(user_message: str, user_id: str | None = None, thread_id: str | None = None) -> dict:

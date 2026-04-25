@@ -16,7 +16,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, message_to_dict
 
 from app.core.agent_runtime import AgentRuntime, get_agent_runtime
 from app.core.retry_policy import is_transient_workflow_error
-from app.graph.career_graph import stream_graph_updates
+from app.graph.career_graph_runner import stream_graph_updates
 from app.models.user import User
 from app.schema.workflow import WorkflowStreamRequest
 from app.services.workflow_thread import register_workflow_thread

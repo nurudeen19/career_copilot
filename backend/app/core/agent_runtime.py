@@ -121,6 +121,6 @@ def reset_agent_runtime() -> None:
     """Clear the default runtime (tests or config reload)."""
     global _runtime
     _runtime = None
-    from app.graph.career_graph import reset_graph
+    from app.graph.career_graph_builder import reset_graph
 
     reset_graph()
