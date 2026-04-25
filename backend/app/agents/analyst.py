@@ -21,7 +21,7 @@ class AnalystAgent:
         - `feasibility_score` only when evidence supports scoring (else null).
         - `timeline_estimate` only from evidence, not generic assumptions.
 
-        If authenticated, call `get_my_saved_profile()` when relevant.
+        `get_my_saved_profile()` (no args): saved career summary and user-stated direction. Call it to sanity-check gaps and feasibility against what they already said they want; avoid advice that ignores their saved goals unless the thread clearly overrides them.
         Return valid structured output.
     """)
     TOOLS: ClassVar[tuple[Any, ...]] = PROFILE_TOOLS

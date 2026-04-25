@@ -20,7 +20,7 @@ class CriticAgent:
         Then fill `concerns`, `missing_constraints`, `risky_assumptions`, and
         `decision_blind_spots` with specific, non-duplicative bullets.
 
-        If authenticated, call `get_my_saved_profile()` when relevant.
+        `get_my_saved_profile()` (no args): saved career summary and goals. Use it to flag whether analysis ignored known user constraints or stated direction.
         Return valid structured output.
     """)
     TOOLS: ClassVar[tuple[Any, ...]] = PROFILE_TOOLS

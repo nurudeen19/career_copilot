@@ -22,7 +22,7 @@ class SynthesizerAgent:
         - In `limitations_acknowledged`, state unresolved open questions and major critic concerns.
         - Do not invent tool results or sources.
 
-        If authenticated, call `get_my_saved_profile()` when it improves alignment.
+        `get_my_saved_profile()` (no args): saved career summary and future direction. Call it so the final reply stays consistent with their on-file goals and preferences unless this turn explicitly changes them.
         Return valid structured output.
     """)
     TOOLS: ClassVar[tuple[Any, ...]] = PROFILE_TOOLS

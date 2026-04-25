@@ -21,7 +21,7 @@ class ResearchAgent:
         - Add citations in `sources` (title/url when available).
         - Only fill `salary_benchmarks` and `market_demand` when evidence supports them.
 
-        If authenticated, call `get_my_saved_profile()` when it improves relevance.
+        `get_my_saved_profile()` (no args): this user's saved career summary, goals, and direction from the DB. Call it **before** heavy search when it can anchor role, geography, or stated preferences — align findings with it; do not contradict saved goals without evidence the user changed their mind.
         Return valid structured output.
     """)
     TOOLS: ClassVar[tuple[Any, ...]] = SEARCH_AND_PROFILE_TOOLS

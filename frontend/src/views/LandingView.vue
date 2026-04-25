@@ -1,5 +1,11 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
+
+import { useAuthStore } from '@/stores/auth'
+
+const auth = useAuthStore()
+const canUseApp = computed(() => auth.canUseApp)
 </script>
 
 <template>
@@ -7,8 +13,13 @@ import { RouterLink } from 'vue-router'
     <header class="nav cc-container">
       <span class="logo cc-display">Career Copilot</span>
       <nav class="nav-links">
-        <RouterLink class="nav-link" to="/signin">Sign in</RouterLink>
-        <RouterLink class="cc-btn cc-btn--primary nav-cta" to="/signup">Get started</RouterLink>
+        <template v-if="canUseApp">
+          <RouterLink class="cc-btn cc-btn--primary nav-cta" to="/dashboard">Open dashboard</RouterLink>
+        </template>
+        <template v-else>
+          <RouterLink class="nav-link" to="/signin">Sign in</RouterLink>
+          <RouterLink class="cc-btn cc-btn--primary nav-cta" to="/signup">Get started</RouterLink>
+        </template>
       </nav>
     </header>
 
@@ -24,8 +35,13 @@ import { RouterLink } from 'vue-router'
           grounded in <em>your</em> story, not a generic script.
         </p>
         <div class="hero-actions">
-          <RouterLink class="cc-btn cc-btn--primary" to="/signup">Begin free</RouterLink>
-          <RouterLink class="cc-btn cc-btn--ghost" to="/signin">I already have an account</RouterLink>
+          <template v-if="canUseApp">
+            <RouterLink class="cc-btn cc-btn--primary" to="/dashboard">Continue to dashboard</RouterLink>
+          </template>
+          <template v-else>
+            <RouterLink class="cc-btn cc-btn--primary" to="/signup">Begin free</RouterLink>
+            <RouterLink class="cc-btn cc-btn--ghost" to="/signin">I already have an account</RouterLink>
+          </template>
         </div>
       </section>
 
@@ -50,7 +66,9 @@ import { RouterLink } from 'vue-router'
         <div class="closing-card cc-card">
           <h2 class="closing-title cc-display">Ready when you are</h2>
           <p class="closing-copy">Create an account, share a bit about your path, and open the conversation.</p>
-          <RouterLink class="cc-btn cc-btn--primary" to="/signup">Create your space</RouterLink>
+          <RouterLink class="cc-btn cc-btn--primary" :to="canUseApp ? '/dashboard' : '/signup'">
+            {{ canUseApp ? 'Open your dashboard' : 'Create your space' }}
+          </RouterLink>
         </div>
       </section>
     </main>

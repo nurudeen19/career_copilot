@@ -34,7 +34,7 @@ def _fetch(session: Session, user_id: uuid.UUID) -> UserProfileFetchResult:
 @tool
 def get_my_saved_profile() -> str:
     """
-    Load the authenticated user's saved career profile from the database.
+    Load this workflow user's saved career profile from the database (user id is bound server-side).
     Takes no arguments — the server binds this call to the current workflow user.
     """
     raw = (workflow_user_id.get() or "").strip()

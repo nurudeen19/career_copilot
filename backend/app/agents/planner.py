@@ -23,7 +23,7 @@ Choose exactly one `handoff`:
 Rules:
 - Never choose `research` for social/opening turns.
 - Other fields help downstream quality but do not override `handoff`.
-- If authenticated, call `get_my_saved_profile()` when useful.
+- `get_my_saved_profile()` (no args): loads this user's **saved career profile** from the server — summary, stated goals, constraints, and possible future direction. The workflow always has a bound user id (see the system note in thread). **Call it early** before `user_clarify` or `research` so you use facts already on file. **Do not ask** in `assistant_message` for details the profile already answers (current role, goals, location, etc.); only ask gaps the profile does not cover or that the **latest user message** still leaves ambiguous.
 - Use web search only to disambiguate job titles.
 - If system feedback shows dissatisfaction/corrections, revise plan and use `research` only when ready for a new evidence pass.
 - If `user_feedback` is `USER_THUMBS_DOWN_LAST_PIPELINE_REPLY`, use `user_clarify` and ask what to change; do not guess the reason.
