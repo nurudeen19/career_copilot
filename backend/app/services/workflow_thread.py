@@ -56,10 +56,13 @@ def register_workflow_thread(*, user_id: uuid.UUID, thread_id: str) -> None:
         if existing is not None:
             if existing.user_id != user_id:
                 _log.error(
-                    "workflow thread_id collision: thread_id=%s expected_user=%s found_user=%s",
-                    tid,
-                    user_id,
-                    existing.user_id,
+                    "Workflow thread_id collision",
+                    extra={
+                        "event": "workflow_thread_collision",
+                        "thread_id": tid,
+                        "expected_user_id": str(user_id),
+                        "found_user_id": str(existing.user_id),
+                    },
                 )
                 raise RuntimeError("thread_id collision")
             return
@@ -88,7 +91,10 @@ def delete_workflow_thread_for_user(db: Session, user: User, thread_id: str) -> 
     try:
         tup = saver.get_tuple({"configurable": {"thread_id": tid}})
     except Exception:  # noqa: BLE001
-        _log.exception("get_tuple failed during thread delete thread_id=%s", tid)
+        _log.exception(
+            "Checkpoint get_tuple failed during thread delete",
+            extra={"event": "workflow_thread_delete_get_tuple_failed", "thread_id": tid},
+        )
         tup = None
 
     if tup is None:

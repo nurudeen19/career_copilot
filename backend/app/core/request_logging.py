@@ -28,51 +28,34 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         try:
             response = await call_next(request)
         except Exception:
-            duration_ms = (time.perf_counter() - start) * 1000
+            duration_ms = round((time.perf_counter() - start) * 1000, 3)
             logger.exception(
-                "%s %s user_id=%s failed after %.1f ms",
-                method,
-                path,
-                uid_log,
-                duration_ms,
+                "HTTP request failed",
+                extra={
+                    "event": "http_request_error",
+                    "http_method": method,
+                    "http_path": path,
+                    "user_id": uid_log,
+                    "duration_ms": duration_ms,
+                },
             )
             raise
-        duration_ms = (time.perf_counter() - start) * 1000
+        duration_ms = round((time.perf_counter() - start) * 1000, 3)
         status = response.status_code
+        base_extra = {
+            "event": "http_request",
+            "http_method": method,
+            "http_path": path,
+            "user_id": uid_log,
+            "http_status": status,
+            "duration_ms": duration_ms,
+        }
         if path == "/health":
-            logger.debug(
-                "%s %s user_id=%s -> %s in %.1f ms",
-                method,
-                path,
-                uid_log,
-                status,
-                duration_ms,
-            )
+            logger.debug("HTTP request", extra={**base_extra, "event": "http_request_health"})
         elif status >= 500:
-            logger.error(
-                "%s %s user_id=%s -> %s in %.1f ms",
-                method,
-                path,
-                uid_log,
-                status,
-                duration_ms,
-            )
+            logger.error("HTTP request server error", extra={**base_extra, "http_outcome": "server_error"})
         elif status >= 400:
-            logger.warning(
-                "%s %s user_id=%s -> %s in %.1f ms",
-                method,
-                path,
-                uid_log,
-                status,
-                duration_ms,
-            )
+            logger.warning("HTTP request client error", extra={**base_extra, "http_outcome": "client_error"})
         else:
-            logger.info(
-                "%s %s user_id=%s -> %s in %.1f ms",
-                method,
-                path,
-                uid_log,
-                status,
-                duration_ms,
-            )
+            logger.info("HTTP request ok", extra={**base_extra, "http_outcome": "ok"})
         return response

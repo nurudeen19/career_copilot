@@ -5,6 +5,9 @@ ARCHITECTURE: Unified database abstraction layer supporting both Postgres and SQ
 - Postgres: **two** ``psycopg_pool.ConnectionPool`` instances (same server, separate caps):
   one for SQLAlchemy only, one for LangGraph PostgresSaver only. That avoids one subsystem
   exhausting the shared bucket during long multi-minute agentic runs.
+- Both pools use ``close_returns=True`` so ``Connection.close()`` returns the client to the pool.
+  **Required** for the SQLAlchemy ``NullPool`` + ``getconn()`` integration; otherwise connections
+  are not recycled and you eventually hit ``PoolTimeout``.
 - SQLite: uses default pooling, local checkpointer
 - No forcing of connection type; app adapts intelligently to the URL
 """
@@ -111,6 +114,9 @@ def configure_pool(database_url: str | None) -> tuple[Any | None, Any | None]:
             "max_lifetime": _POOL_MAX_LIFETIME_S,
             "reconnect_timeout": _POOL_RECONNECT_TIMEOUT_S,
             "check": _pool_check_connection,
+            # SQLAlchemy NullPool calls .close() on checkout; without this, conns are not put back
+            # in the pool → exhaustion and PoolTimeout after long / concurrent workflows.
+            "close_returns": True,
         }
         _pool_sa = ConnectionPool(
             min_size=_POOL_SA_MIN,

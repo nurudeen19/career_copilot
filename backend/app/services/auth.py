@@ -121,7 +121,10 @@ def register_user(db: Session, name: str, email: str, password: str, settings: S
         )
     except Exception as e:
         db.rollback()
-        _log.exception("Verification email failed for %s", user.email)
+        _log.exception(
+            "Verification email failed",
+            extra={"event": "auth_verification_email_failed", "user_id": str(user.id)},
+        )
         raise HTTPException(
             status_code=503,
             detail="Unable to send verification email. Try again later.",
@@ -217,7 +220,10 @@ def resend_verification_email(db: Session, email: str, settings: Settings) -> No
         )
     except Exception:
         db.rollback()
-        _log.exception("Resend verification email failed for %s", user.email)
+        _log.exception(
+            "Resend verification email failed",
+            extra={"event": "auth_resend_verification_email_failed", "user_id": str(user.id)},
+        )
         raise HTTPException(
             status_code=503,
             detail="Unable to send verification email. Try again later.",
@@ -232,10 +238,16 @@ def request_password_reset(db: Session, email: str, settings: Settings) -> None:
     if user is None:
         return
     if settings.auth_dev_auto_verify_email:
-        _log.debug("password reset email skipped (auth_dev_auto_verify_email)")
+        _log.debug(
+            "Password reset email skipped (dev auto-verify)",
+            extra={"event": "auth_password_reset_skipped_dev"},
+        )
         return
     if not settings.mailtrap_api_token:
-        _log.warning("password reset requested but mailtrap_api_token is not set")
+        _log.warning(
+            "Password reset requested but Mailtrap is not configured",
+            extra={"event": "auth_password_reset_mail_unconfigured"},
+        )
         return
 
     raw = secrets.token_urlsafe(32)
@@ -265,7 +277,10 @@ def request_password_reset(db: Session, email: str, settings: Settings) -> None:
         )
     except Exception:
         db.rollback()
-        _log.exception("Password reset email failed for %s", user.email)
+        _log.exception(
+            "Password reset email failed",
+            extra={"event": "auth_password_reset_email_failed", "user_id": str(user.id)},
+        )
         raise HTTPException(
             status_code=503,
             detail="Unable to send password reset email. Try again later.",

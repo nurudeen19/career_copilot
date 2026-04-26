@@ -13,7 +13,7 @@ dependencies = [
     "uvicorn[standard]>=0.32",
     "sqlalchemy>=2.0",
     "alembic>=1.14",
-    "psycopg[binary]>=3.2",
+    "psycopg[binary]>=3.3",
     "psycopg-pool>=3.2",
     "passlib[argon2]>=1.7",
     "python-jose[cryptography]>=3.3",
@@ -34,6 +34,7 @@ dependencies = [
     "tenacity>=9.0",
     "mailtrap>=2.5.0",
     "slowapi>=0.1.9",
+    "colorlog>=6.10.1",
 ]
 
 [project.optional-dependencies]

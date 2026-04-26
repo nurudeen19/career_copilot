@@ -17,6 +17,21 @@ class AppSettings(BaseModel):
     app_name: str = "Career Copilot"
     debug: bool = False
     log_level: str = Field(default="INFO")
+    log_file_json: bool = Field(
+        default=True,
+        description="Write newline-delimited JSON to app.log when file logging is enabled (jq-friendly).",
+        validation_alias=AliasChoices("LOG_FILE_JSON", "LOG_JSON"),
+    )
+    log_console_json: bool = Field(
+        default=False,
+        description="If true, stderr is JSON too (e.g. only stdout shipped to a log stack). Default: colored text.",
+        validation_alias=AliasChoices("LOG_CONSOLE_JSON"),
+    )
+    log_color: bool = Field(
+        default=True,
+        description="ANSI colors on stderr by level (colorlog). Off if not a TTY, NO_COLOR is set, or LOG_COLOR=false.",
+        validation_alias=AliasChoices("LOG_COLOR"),
+    )
     log_file_enabled: bool = Field(default=True)
     log_file_dir: str = Field(default_factory=default_log_file_dir)
     cors_allow_origins: str = Field(

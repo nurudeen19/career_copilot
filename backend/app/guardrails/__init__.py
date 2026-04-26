@@ -43,7 +43,10 @@ def run_user_input_guardrails(state: dict, settings: Settings | None = None) -> 
     s = settings or get_settings()
     text = _user_text_from_state(state)
     if not text:
-        _log.warning("input_guardrails: reject empty_text")
+        _log.warning(
+            "Input guardrails rejected empty text",
+            extra={"event": "input_guardrails_empty"},
+        )
         return {"validation_error": "No message to process."}
 
     source = "user_feedback" if (state.get("user_feedback") or "").strip() else "user_message"
@@ -52,22 +55,35 @@ def run_user_input_guardrails(state: dict, settings: Settings | None = None) -> 
     size_err = validate_input_size(text, s)
     if size_err:
         _log.warning(
-            "input_guardrails: size_reject source=%s chars=%s detail=%s",
-            source,
-            n_chars,
-            (size_err[:200] + "…") if len(size_err) > 200 else size_err,
+            "Input guardrails rejected message (size)",
+            extra={
+                "event": "input_guardrails_size_reject",
+                "source": source,
+                "char_count": n_chars,
+                "detail": (size_err[:200] + "…") if len(size_err) > 200 else size_err,
+            },
         )
         return {"validation_error": size_err}
 
     safe, denial = classify_prompt(text, settings=s)
     if safe:
-        _log.info("input_guardrails: passed source=%s chars=%s (size + prompt_guard)", source, n_chars)
+        _log.info(
+            "Input guardrails passed",
+            extra={
+                "event": "input_guardrails_passed",
+                "source": source,
+                "char_count": n_chars,
+            },
+        )
         return {"validation_error": ""}
 
     _log.warning(
-        "input_guardrails: prompt_guard_reject source=%s chars=%s detail=%s",
-        source,
-        n_chars,
-        (denial or "blocked")[:160],
+        "Input guardrails rejected message (prompt guard)",
+        extra={
+            "event": "input_guardrails_prompt_reject",
+            "source": source,
+            "char_count": n_chars,
+            "detail": (denial or "blocked")[:160],
+        },
     )
     return {"validation_error": denial or "This message could not be accepted."}

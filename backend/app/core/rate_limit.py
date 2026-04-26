@@ -67,4 +67,7 @@ def limit_health() -> str:
 def install_rate_limits(app: FastAPI) -> None:
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-    logger.info("Rate limiting installed (enabled=%s)", get_settings().rate_limits.enabled)
+    logger.info(
+        "Rate limiting installed",
+        extra={"event": "rate_limit_installed", "enabled": get_settings().rate_limits.enabled},
+    )

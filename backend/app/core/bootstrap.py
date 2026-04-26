@@ -19,7 +19,10 @@ def _configure_langsmith() -> None:
     try:
         from langsmith import Client, configure as langsmith_configure
     except ImportError:
-        _log.warning("langsmith not installed; skipping LangSmith configuration")
+        _log.warning(
+            "LangSmith client not installed; skipping configuration",
+            extra={"event": "bootstrap_langsmith_skip", "reason": "import_error"},
+        )
         return
 
     settings = get_settings()
@@ -29,8 +32,11 @@ def _configure_langsmith() -> None:
 
     if tracing and not key:
         _log.warning(
-            "LangSmith tracing is on (LANGSMITH_TRACING_V2 / LANGSMITH_TRACING_ENABLED) but LANGSMITH_API_KEY "
-            "is empty — tracing disabled until a key is set."
+            "LangSmith tracing enabled in settings but API key is empty; tracing disabled",
+            extra={
+                "event": "bootstrap_langsmith_key_missing",
+                "tracing_requested": True,
+            },
         )
         tracing = False
 
@@ -44,33 +50,61 @@ def _configure_langsmith() -> None:
             enabled=True,
             project_name=settings.langsmith_project,
         )
-        _log.info("LangSmith tracing enabled (project=%r)", settings.langsmith_project)
+        _log.info(
+            "LangSmith tracing enabled",
+            extra={
+                "event": "bootstrap_langsmith_enabled",
+                "langsmith_project": settings.langsmith_project,
+            },
+        )
     else:
         langsmith_configure(enabled=False, client=None)
         if key and not bool(settings.langsmith_tracing_enabled):
             _log.info(
-                "LangSmith API key is set but tracing is off — set LANGSMITH_TRACING_V2=true "
-                "or LANGSMITH_TRACING_ENABLED=true to record runs to LangSmith."
+                "LangSmith API key set but tracing disabled in settings",
+                extra={"event": "bootstrap_langsmith_tracing_off", "has_api_key": True},
             )
         else:
-            _log.info("LangSmith tracing disabled.")
+            _log.info(
+                "LangSmith tracing disabled",
+                extra={"event": "bootstrap_langsmith_disabled"},
+            )
 
 
 def init_app() -> None:
     """Load settings, LangSmith client, shared DB pool, SQLAlchemy engine, guardrails, and checkpointer (one-time)."""
     settings = get_settings()
     configure_logging(settings)
-    _log.info("init_app: configuring LangSmith from settings")
+    _log.info(
+        "Bootstrap: LangSmith",
+        extra={"event": "bootstrap_init_step", "step": "langsmith"},
+    )
     _configure_langsmith()
-    _log.info("init_app: initializing Postgres connection pools (ORM + checkpoint)")
+    _log.info(
+        "Bootstrap: connection pools",
+        extra={"event": "bootstrap_init_step", "step": "configure_pool"},
+    )
     configure_pool(settings.database_url)
-    _log.info("init_app: configuring SQLAlchemy engine (ORM pool)")
+    _log.info(
+        "Bootstrap: SQLAlchemy engine",
+        extra={"event": "bootstrap_init_step", "step": "configure_engine"},
+    )
     configure_engine(settings.database_url)
-    _log.info("init_app: loading prompt guard (%s)", settings.prompt_guard.model_id)
+    _log.info(
+        "Bootstrap: prompt guard",
+        extra={
+            "event": "bootstrap_init_step",
+            "step": "setup_guardrails",
+            "prompt_guard_model_id": settings.prompt_guard.model_id,
+        },
+    )
     setup_guardrails(settings)
-    _log.info("init_app: LangGraph checkpointer (checkpoint pool)")
+    _log.info(
+        "Bootstrap: LangGraph checkpointer",
+        extra={"event": "bootstrap_init_step", "step": "get_checkpointer"},
+    )
     get_checkpointer(settings)
-    _log.info("init_app: finished")
+    _log.info("Bootstrap complete", extra={"event": "bootstrap_init_complete"})
 
 
 def verify_database_connection() -> None:
@@ -78,31 +112,35 @@ def verify_database_connection() -> None:
     settings = get_settings()
     if not settings.database_url:
         return
-    _log.info("verify_database_connection: pinging database")
+    _log.info("Database ping", extra={"event": "database_verify_start"})
     ping()
-    _log.info("verify_database_connection: ok")
+    _log.info("Database ping ok", extra={"event": "database_verify_ok"})
 
 
 def shutdown_app() -> None:
     """Release database connections, checkpoint pool, guardrails, and flush LangSmith."""
-    _log.info("shutdown_app: unloading guardrails")
+    _log.info("Shutdown: guardrails", extra={"event": "shutdown_step", "step": "teardown_guardrails"})
     teardown_guardrails()
-    _log.info("shutdown_app: disposing LangGraph checkpointer")
+    _log.info("Shutdown: checkpointer", extra={"event": "shutdown_step", "step": "dispose_checkpointer"})
     dispose_checkpointer()
-    _log.info("shutdown_app: disposing database engine (release ORM pool checkouts)")
+    _log.info("Shutdown: SQLAlchemy engine", extra={"event": "shutdown_step", "step": "dispose_engine"})
     dispose_engine()
-    _log.info("shutdown_app: disposing Postgres connection pools")
+    _log.info("Shutdown: connection pools", extra={"event": "shutdown_step", "step": "dispose_pool"})
     dispose_pool()
     try:
         from langchain_core.tracers.langchain import wait_for_all_tracers
 
         wait_for_all_tracers()
     except Exception:  # noqa: BLE001
-        _log.debug("wait_for_all_tracers skipped or failed during shutdown", exc_info=True)
+        _log.debug(
+            "wait_for_all_tracers skipped or failed during shutdown",
+            extra={"event": "shutdown_langsmith_tracers"},
+            exc_info=True,
+        )
     try:
         from langsmith import configure as langsmith_configure
 
         langsmith_configure(enabled=False, client=None)
     except ImportError:
         pass
-    _log.info("shutdown_app: complete")
+    _log.info("Shutdown complete", extra={"event": "shutdown_complete"})

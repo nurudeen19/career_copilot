@@ -31,14 +31,29 @@ def invoke_agent_with_resilience(
         return r(call)
     except Exception as exc:
         if is_transient_workflow_error(exc):
-            _log.warning("agent_step_transient_exhausted step=%s: %s", step, exc)
+            _log.warning(
+                "Agent step transient retries exhausted",
+                extra={
+                    "event": "agent_step_transient_exhausted",
+                    "workflow_step": step,
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc)[:2000],
+                },
+            )
             raise
         # Expected path when the model or parser fails: graph continues with node fallback.
         _log.info(
-            "agent_step_fallback step=%s err_type=%s err=%s",
-            step,
-            type(exc).__name__,
-            exc,
+            "Agent step using fallback after non-transient failure",
+            extra={
+                "event": "agent_step_fallback",
+                "workflow_step": step,
+                "error_type": type(exc).__name__,
+                "error_message": str(exc)[:2000],
+            },
         )
-        _log.debug("agent_step_fallback traceback step=%s", step, exc_info=True)
+        _log.debug(
+            "Agent step fallback traceback",
+            extra={"event": "agent_step_fallback_trace", "workflow_step": step},
+            exc_info=True,
+        )
         return fallback(exc)

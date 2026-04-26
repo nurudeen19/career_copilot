@@ -100,21 +100,29 @@ def iter_workflow_sse(
             attempt += 1
             if attempt >= max_stream_attempts:
                 _log.warning(
-                    "workflow_stream_giving_up thread_id=%s attempts=%s detail=%s",
-                    run_tid,
-                    attempt,
-                    exc,
+                    "Workflow stream retries exhausted",
+                    extra={
+                        "event": "workflow_stream_giving_up",
+                        "thread_id": run_tid,
+                        "attempt": attempt,
+                        "error_type": type(exc).__name__,
+                        "error_message": str(exc)[:2000],
+                    },
                 )
                 yield _sse_line({"event": "error", "thread_id": run_tid, "detail": str(exc)})
                 return
             delay = min(8.0, 0.5 * (2 ** (attempt - 1)))
             _log.warning(
-                "workflow_stream_retry thread_id=%s attempt=%s/%s sleep_s=%.2f detail=%s",
-                run_tid,
-                attempt,
-                max_stream_attempts,
-                delay,
-                exc,
+                "Workflow stream transient error; retrying",
+                extra={
+                    "event": "workflow_stream_retry",
+                    "thread_id": run_tid,
+                    "attempt": attempt,
+                    "max_stream_attempts": max_stream_attempts,
+                    "sleep_s": round(delay, 3),
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc)[:2000],
+                },
             )
             time.sleep(delay)
 
@@ -155,7 +163,10 @@ async def aiter_workflow_sse(
     """
     tid = str(body.thread_id) if body.thread_id else str(uuid.uuid4())
     register_workflow_thread(user_id=user.id, thread_id=tid)
-    _log.info("workflow_stream_start user_id=%s thread_id=%s", user.id, tid)
+    _log.info(
+        "Workflow SSE stream started",
+        extra={"event": "workflow_stream_start", "user_id": str(user.id), "thread_id": tid},
+    )
     q: queue.Queue[Any] = queue.Queue()
     worker = threading.Thread(
         target=_sse_producer,
@@ -170,15 +181,21 @@ async def aiter_workflow_sse(
             if item is _QUEUE_END:
                 break
             if isinstance(item, BaseException):
-                _log.exception("workflow_stream_error user_id=%s thread_id=%s", user.id, tid)
+                _log.exception(
+                    "Workflow SSE producer error",
+                    extra={"event": "workflow_stream_error", "user_id": str(user.id), "thread_id": tid},
+                )
                 raise item
             yield str(item).encode("utf-8")
     finally:
         worker.join(timeout=0.5)
         if worker.is_alive():
             _log.warning(
-                "workflow_stream thread still running after disconnect or timeout user_id=%s thread_id=%s",
-                user.id,
-                tid,
+                "Workflow SSE worker still running after client disconnect or join timeout",
+                extra={
+                    "event": "workflow_stream_worker_timeout",
+                    "user_id": str(user.id),
+                    "thread_id": tid,
+                },
             )
 

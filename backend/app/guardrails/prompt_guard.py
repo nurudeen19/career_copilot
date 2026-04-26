@@ -60,7 +60,14 @@ def setup_prompt_guard(settings: Settings) -> None:
     _pipeline = pipeline(**kwargs)
     # Warm a trivial forward pass so the first user message does not pay one-time costs alone.
     _pipeline("ok", truncation=True, max_length=512)
-    _log.info("prompt_guard: loaded model=%r device=%s", settings.prompt_guard.model_id, settings.prompt_guard.device)
+    _log.info(
+        "Prompt guard model loaded",
+        extra={
+            "event": "prompt_guard_loaded",
+            "model_id": settings.prompt_guard.model_id,
+            "device": settings.prompt_guard.device,
+        },
+    )
 
 
 def teardown_prompt_guard() -> None:
@@ -109,9 +116,12 @@ def _softmax_malicious_probability(text: str) -> float:
     idx = _malicious_class_index(model)
     if idx < 0 or idx >= probs.shape[-1]:
         _log.error(
-            "prompt_guard: malicious index %s out of range for num_labels=%s",
-            idx,
-            probs.shape[-1],
+            "Prompt guard malicious class index out of range",
+            extra={
+                "event": "prompt_guard_bad_malicious_index",
+                "malicious_index": idx,
+                "num_labels": int(probs.shape[-1]),
+            },
         )
         return 1.0
     return float(probs[0, idx].item())
@@ -120,7 +130,10 @@ def _softmax_malicious_probability(text: str) -> float:
 def classify_prompt(text: str, settings: Settings | None = None) -> tuple[bool, str | None]:
     """(safe, denial_message). Uses softmax P(malicious) vs threshold (Meta cookbook), not top-1 only."""
     if _pipeline is None:
-        _log.error("prompt_guard: classify_prompt called with no pipeline loaded")
+        _log.error(
+            "Prompt guard classify called with no pipeline loaded",
+            extra={"event": "prompt_guard_not_loaded"},
+        )
         return False, "Prompt guard is not initialized."
 
     s = settings or get_settings()
@@ -129,27 +142,42 @@ def classify_prompt(text: str, settings: Settings | None = None) -> tuple[bool, 
     est_tokens = max(len(text) // _APPROX_CHARS_PER_TOKEN, 1)
     if est_tokens > _MAX_GUARD_MODEL_TOKENS:
         _log.info(
-            "prompt_guard: input ~%s tokens (chars=%s); classifier truncates to %s — "
-            "only the beginning of the text is fully scanned",
-            est_tokens,
-            len(text),
-            _MAX_GUARD_MODEL_TOKENS,
+            "Prompt guard input exceeds model window; text truncated for scan",
+            extra={
+                "event": "prompt_guard_input_truncated",
+                "estimated_tokens": est_tokens,
+                "char_count": len(text),
+                "max_model_tokens": _MAX_GUARD_MODEL_TOKENS,
+            },
         )
 
     try:
         p_mal = _softmax_malicious_probability(text)
     except Exception as exc:  # noqa: BLE001
-        _log.exception("prompt_guard: inference failed")
+        _log.exception(
+            "Prompt guard inference failed",
+            extra={"event": "prompt_guard_inference_failed"},
+        )
         return False, f"Prompt guard failed: {exc}"
 
-    _log.debug("prompt_guard: p_malicious=%.4f threshold=%.4f", p_mal, threshold)
+    _log.debug(
+        "Prompt guard scores",
+        extra={
+            "event": "prompt_guard_scores",
+            "p_malicious": round(p_mal, 6),
+            "threshold": threshold,
+        },
+    )
 
     if p_mal >= threshold:
         _log.warning(
-            "prompt_guard: BLOCKED p_malicious=%.4f >= threshold=%.4f (chars=%s)",
-            p_mal,
-            threshold,
-            len(text),
+            "Prompt guard blocked message",
+            extra={
+                "event": "prompt_guard_blocked",
+                "p_malicious": round(p_mal, 6),
+                "threshold": threshold,
+                "char_count": len(text),
+            },
         )
         return (
             False,
@@ -158,9 +186,12 @@ def classify_prompt(text: str, settings: Settings | None = None) -> tuple[bool, 
         )
 
     _log.info(
-        "prompt_guard: allowed p_malicious=%.4f < threshold=%.4f (chars=%s)",
-        p_mal,
-        threshold,
-        len(text),
+        "Prompt guard allowed message",
+        extra={
+            "event": "prompt_guard_allowed",
+            "p_malicious": round(p_mal, 6),
+            "threshold": threshold,
+            "char_count": len(text),
+        },
     )
     return True, None

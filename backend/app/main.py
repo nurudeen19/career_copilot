@@ -22,30 +22,58 @@ async def lifespan(_app: FastAPI):
     settings = get_settings()
     if not settings.database_url:
         msg = "DATABASE_URL is required to run the HTTP API."
-        _lifecycle_log.error(msg)
+        _lifecycle_log.error(
+            msg,
+            extra={"event": "lifecycle_startup_config_error", "error_code": "database_url_missing"},
+        )
         raise RuntimeError(msg)
-    _lifecycle_log.info("Startup: initializing application (database, guardrails, tracing)")
+    _lifecycle_log.info(
+        "Application startup: initializing core services",
+        extra={"event": "lifecycle_startup_begin"},
+    )
     try:
         init_app()
         verify_database_connection()
     except Exception:
-        _lifecycle_log.exception("Startup failed during init_app or database verification")
+        _lifecycle_log.exception(
+            "Application startup failed",
+            extra={"event": "lifecycle_startup_failed"},
+        )
         raise
-    _lifecycle_log.info("Startup: application ready")
+    _lifecycle_log.info(
+        "Application startup complete",
+        extra={"event": "lifecycle_startup_ready"},
+    )
     yield
-    _lifecycle_log.info("Shutdown: releasing resources")
+    _lifecycle_log.info(
+        "Application shutdown: releasing resources",
+        extra={"event": "lifecycle_shutdown_begin"},
+    )
     try:
         shutdown_app()
     except Exception:
-        _lifecycle_log.exception("Shutdown raised an error")
+        _lifecycle_log.exception(
+            "Application shutdown raised an error",
+            extra={"event": "lifecycle_shutdown_error"},
+        )
         raise
-    _lifecycle_log.info("Shutdown: complete")
+    _lifecycle_log.info(
+        "Application shutdown complete",
+        extra={"event": "lifecycle_shutdown_complete"},
+    )
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings)
-    _lifecycle_log.info("Creating FastAPI app=%r debug=%s", settings.app_name, settings.debug)
+    _lifecycle_log.info(
+        "Creating FastAPI application",
+        extra={
+            "event": "lifecycle_create_app",
+            "app_name": settings.app_name,
+            "debug": settings.debug,
+        },
+    )
     application = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=lifespan)
     install_rate_limits(application)
     if settings.cors_allow_origins:

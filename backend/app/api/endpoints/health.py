@@ -65,5 +65,8 @@ def get_health(request: Request) -> HealthResponse:
         checks=checks,
     )
     if overall == "unhealthy":
-        logger.error("Health check unhealthy: %s", checks)
+        logger.error(
+            "Health check aggregate unhealthy",
+            extra={"event": "health_unhealthy", "checks": checks},
+        )
     return body

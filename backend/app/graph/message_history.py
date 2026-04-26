@@ -37,7 +37,11 @@ def messages_for_llm(messages: Sequence[AnyMessage] | None, settings: Settings) 
             include_system=True,
         )
     except Exception:
-        _log.warning("messages_for_llm: trim_messages failed; using last 24 messages", exc_info=True)
+        _log.warning(
+            "messages_for_llm: trim_messages failed; using last 24 messages",
+            extra={"event": "message_history_trim_failed", "fallback_message_count": 24},
+            exc_info=True,
+        )
         return list(seq[-24:]) if len(seq) > 24 else list(seq)
 
     if trimmed:
