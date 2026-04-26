@@ -47,6 +47,8 @@ const input = ref('')
 const streaming = ref(false)
 const threadId = ref<string | null>(null)
 const error = ref<string | null>(null)
+/** Assistant message we tried to send thumbs-down feedback for; allows one-click retry after failure. */
+const thumbDownRetryFor = ref<ChatMessage | null>(null)
 
 /** While waiting for SSE: dots only → rotating lines → live step labels from the graph. */
 const STREAM_INTRO_MS = 2800
@@ -198,6 +200,7 @@ function loadPersistedState() {
 
 async function clearConversation() {
   if (streaming.value) return
+  thumbDownRetryFor.value = null
   const tid = threadId.value
   if (tid) {
     try {
@@ -347,6 +350,7 @@ async function onThumbDown(m: ChatMessage) {
     return
   }
 
+  thumbDownRetryFor.value = null
   m.userRating = 'down'
   error.value = null
   streaming.value = true
@@ -363,6 +367,7 @@ async function onThumbDown(m: ChatMessage) {
   streaming.value = false
 
   if (result.ok) {
+    thumbDownRetryFor.value = null
     if (result.assistantText.trim()) {
       messages.value.push({
         id: newMessageId(),
@@ -377,6 +382,7 @@ async function onThumbDown(m: ChatMessage) {
   }
 
   error.value = result.error
+  thumbDownRetryFor.value = m
   delete m.userRating
   messages.value.push({
     id: newMessageId(),
@@ -385,6 +391,12 @@ async function onThumbDown(m: ChatMessage) {
   })
   await scrollToLatest()
   focusComposer()
+}
+
+async function retryThumbDownFeedback() {
+  const m = thumbDownRetryFor.value
+  if (!m || streaming.value) return
+  await onThumbDown(m)
 }
 
 async function send() {
@@ -460,6 +472,11 @@ function onKeydown(e: KeyboardEvent) {
       </header>
 
       <p v-if="error" class="banner" role="status">{{ error }}</p>
+      <p v-if="thumbDownRetryFor && !streaming" class="retry-feedback" role="status">
+        <button type="button" class="cc-btn cc-btn--ghost retry-feedback-btn" @click="void retryThumbDownFeedback()">
+          Retry sending feedback
+        </button>
+      </p>
 
       <div ref="scrollRef" class="scroll">
         <div class="scroll-pad">
@@ -610,6 +627,17 @@ function onKeydown(e: KeyboardEvent) {
   background: rgba(198, 125, 78, 0.12);
   color: #7a4a2a;
   border-bottom: 1px solid rgba(198, 125, 78, 0.15);
+}
+
+.retry-feedback {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0.35rem 1rem 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.retry-feedback-btn {
+  font-size: 0.8125rem;
 }
 
 .scroll {

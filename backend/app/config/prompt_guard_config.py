@@ -27,3 +27,12 @@ class PromptGuardSettings(BaseModel):
             "Lower = stricter (more false positives). Default 0.15 catches many borderline injections."
         ),
     )
+    classify_user_feedback: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("PROMPT_GUARD_CLASSIFY_USER_FEEDBACK"),
+        description=(
+            "When false (default), ``user_feedback`` is only size-checked — not run through the HF prompt guard. "
+            "Feedback often looks like instructions to the classifier (e.g. thumbs-down marker, 'be more concise'). "
+            "Set true to apply the same jailbreak scan as normal chat (stricter)."
+        ),
+    )

@@ -26,7 +26,8 @@ class WorkflowStreamRequest(BaseModel):
         description=(
             "If set, the planner sees it as follow-up dissatisfaction or correction (typically with an existing "
             "``thread_id``). UI thumbs-down sends the opaque marker ``USER_THUMBS_DOWN_LAST_PIPELINE_REPLY``; "
-            "free-text corrections stay short; long prior replies live in checkpointed ``messages``."
+            "free-text corrections stay short; long prior replies live in checkpointed ``messages``. "
+            "Input guardrails size-check this field but do not run the HF prompt guard on it by default."
         ),
     )
 

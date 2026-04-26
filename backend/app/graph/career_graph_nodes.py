@@ -25,9 +25,8 @@ from app.schema.agent_outputs import (
     ResearchAgentOutput,
     SynthesizerAgentOutput,
 )
+from app.graph.feedback_markers import THUMBS_DOWN_FEEDBACK_MARK
 from app.tools.runtime_context import workflow_user_id as workflow_user_id_var
-
-THUMBS_DOWN_FEEDBACK_MARK = "USER_THUMBS_DOWN_LAST_PIPELINE_REPLY"
 
 class CareerGraphState(TypedDict, total=False):
     messages: Annotated[list[AnyMessage], add_messages]

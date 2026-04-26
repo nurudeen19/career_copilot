@@ -127,8 +127,16 @@ def _softmax_malicious_probability(text: str) -> float:
     return float(probs[0, idx].item())
 
 
-def classify_prompt(text: str, settings: Settings | None = None) -> tuple[bool, str | None]:
-    """(safe, denial_message). Uses softmax P(malicious) vs threshold (Meta cookbook), not top-1 only."""
+def classify_prompt(
+    text: str,
+    settings: Settings | None = None,
+    *,
+    malicious_threshold: float | None = None,
+) -> tuple[bool, str | None]:
+    """(safe, denial_message). Uses softmax P(malicious) vs threshold (Meta cookbook), not top-1 only.
+
+    ``malicious_threshold`` overrides ``settings.prompt_guard.malicious_probability_threshold`` when set.
+    """
     if _pipeline is None:
         _log.error(
             "Prompt guard classify called with no pipeline loaded",
@@ -137,7 +145,11 @@ def classify_prompt(text: str, settings: Settings | None = None) -> tuple[bool, 
         return False, "Prompt guard is not initialized."
 
     s = settings or get_settings()
-    threshold = float(s.prompt_guard.malicious_probability_threshold)
+    threshold = (
+        float(malicious_threshold)
+        if malicious_threshold is not None
+        else float(s.prompt_guard.malicious_probability_threshold)
+    )
 
     est_tokens = max(len(text) // _APPROX_CHARS_PER_TOKEN, 1)
     if est_tokens > _MAX_GUARD_MODEL_TOKENS:

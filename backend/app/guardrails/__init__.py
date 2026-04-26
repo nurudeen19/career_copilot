@@ -7,6 +7,7 @@ import logging
 from langchain_core.messages import HumanMessage
 
 from app.config.settings import Settings, get_settings
+from app.graph.feedback_markers import THUMBS_DOWN_FEEDBACK_MARK
 from app.guardrails.input_size import validate_input_size
 from app.guardrails.prompt_guard import classify_prompt, setup_prompt_guard, teardown_prompt_guard
 
@@ -23,67 +24,93 @@ def teardown_guardrails() -> None:
     teardown_prompt_guard()
 
 
-def _user_text_from_state(state: dict) -> str:
-    fb = (state.get("user_feedback") or "").strip()
-    if fb:
-        return fb
+def _iter_guard_segments(state: dict) -> list[tuple[str, str]]:
+    """(channel, text) pairs to validate. ``user_message`` = latest HumanMessage; ``user_feedback`` optional."""
+    out: list[tuple[str, str]] = []
     for m in reversed(state.get("messages") or []):
         if isinstance(m, HumanMessage):
-            return str(m.content or "").strip()
-    return ""
+            t = str(m.content or "").strip()
+            if t:
+                out.append(("user_message", t))
+            break
+    fb = (state.get("user_feedback") or "").strip()
+    if fb:
+        out.append(("user_feedback", fb))
+    return out
+
+
+def _should_classify_feedback_segment(text: str, settings: Settings) -> bool:
+    """HF prompt guard is a poor fit for correction / rating channels unless explicitly enabled."""
+    if text == THUMBS_DOWN_FEEDBACK_MARK:
+        return False
+    return bool(settings.prompt_guard.classify_user_feedback)
 
 
 def run_user_input_guardrails(state: dict, settings: Settings | None = None) -> dict:
-    """Graph step 0: size then prompt guard. Returns ``{validation_error: str}`` (empty string if ok).
+    """Graph step 0: size on each segment; HF prompt guard on chat only (not ``user_feedback`` by default).
 
-    Logs every decision at INFO/WARNING (no raw user text). A *pass* from Llama Prompt Guard 2 only
-    means the classifier scored the text as benign — it can still miss subtle or novel injections
-    (downstream planner/system prompts remain important).
+    ``user_feedback`` (thumbs-down marker, free-text corrections) is still length-limited but not scored
+    as jailbreak by default — those strings often trip Llama Prompt Guard 2 as false positives.
+    Set ``PROMPT_GUARD_CLASSIFY_USER_FEEDBACK=true`` to scan feedback like normal chat.
     """
     s = settings or get_settings()
-    text = _user_text_from_state(state)
-    if not text:
+    segments = _iter_guard_segments(state)
+    if not segments:
         _log.warning(
             "Input guardrails rejected empty text",
             extra={"event": "input_guardrails_empty"},
         )
         return {"validation_error": "No message to process."}
 
-    source = "user_feedback" if (state.get("user_feedback") or "").strip() else "user_message"
-    n_chars = len(text)
+    for channel, text in segments:
+        source = channel
+        n_chars = len(text)
 
-    size_err = validate_input_size(text, s)
-    if size_err:
+        size_err = validate_input_size(text, s)
+        if size_err:
+            _log.warning(
+                "Input guardrails rejected message (size)",
+                extra={
+                    "event": "input_guardrails_size_reject",
+                    "source": source,
+                    "char_count": n_chars,
+                    "detail": (size_err[:200] + "…") if len(size_err) > 200 else size_err,
+                },
+            )
+            return {"validation_error": size_err}
+
+        if channel == "user_feedback" and not _should_classify_feedback_segment(text, s):
+            _log.info(
+                "Input guardrails skipped HF classifier for user_feedback",
+                extra={
+                    "event": "input_guardrails_feedback_skip_classifier",
+                    "char_count": n_chars,
+                    "opaque_marker": text == THUMBS_DOWN_FEEDBACK_MARK,
+                },
+            )
+            continue
+
+        safe, denial = classify_prompt(text, settings=s)
+        if safe:
+            _log.info(
+                "Input guardrails passed",
+                extra={
+                    "event": "input_guardrails_passed",
+                    "source": source,
+                    "char_count": n_chars,
+                },
+            )
+            continue
+
         _log.warning(
-            "Input guardrails rejected message (size)",
+            "Input guardrails rejected message (prompt guard)",
             extra={
-                "event": "input_guardrails_size_reject",
+                "event": "input_guardrails_prompt_reject",
                 "source": source,
                 "char_count": n_chars,
-                "detail": (size_err[:200] + "…") if len(size_err) > 200 else size_err,
+                "detail": (denial or "blocked")[:160],
             },
         )
-        return {"validation_error": size_err}
+        return {"validation_error": denial or "This message could not be accepted."}
 
-    safe, denial = classify_prompt(text, settings=s)
-    if safe:
-        _log.info(
-            "Input guardrails passed",
-            extra={
-                "event": "input_guardrails_passed",
-                "source": source,
-                "char_count": n_chars,
-            },
-        )
-        return {"validation_error": ""}
-
-    _log.warning(
-        "Input guardrails rejected message (prompt guard)",
-        extra={
-            "event": "input_guardrails_prompt_reject",
-            "source": source,
-            "char_count": n_chars,
-            "detail": (denial or "blocked")[:160],
-        },
-    )
-    return {"validation_error": denial or "This message could not be accepted."}
+    return {"validation_error": ""}

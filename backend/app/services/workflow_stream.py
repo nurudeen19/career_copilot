@@ -77,37 +77,66 @@ def iter_workflow_sse(
     attempt = 0
     while attempt < max_stream_attempts:
         emitted = False
+        t0 = time.perf_counter()
+        graph_chunks = 0
+        sse_frames = 0
+
+        def _log_complete(outcome: str, **extra: Any) -> None:
+            duration_ms = round((time.perf_counter() - t0) * 1000, 3)
+            base = {
+                "event": "workflow_stream_complete",
+                "outcome": outcome,
+                "thread_id": run_tid,
+                "user_id": str(user.id),
+                "duration_ms": duration_ms,
+                "graph_stream_chunks": graph_chunks,
+                "sse_frames": sse_frames,
+                "stream_attempt": attempt + 1,
+            }
+            base.update(extra)
+            if outcome == "success":
+                _log.info("Workflow stream finished", extra=base)
+            else:
+                _log.warning("Workflow stream finished", extra=base)
+
         try:
             for update in stream_graph_updates(initial, thread_id=run_tid, runtime=rt):
+                graph_chunks += 1
                 emitted = True
                 if not isinstance(update, dict):
+                    sse_frames += 1
                     yield _sse_line({"thread_id": run_tid, "step": "_", "patch": _serialize_value(update)})
                     continue
-                for step, patch in update.items():
+                for _step, _patch in update.items():
+                    sse_frames += 1
                     yield _sse_line(
                         {
                             "thread_id": run_tid,
-                            "step": step,
-                            "patch": _serialize_value(patch),
+                            "step": _step,
+                            "patch": _serialize_value(_patch),
                         }
                     )
+            sse_frames += 1
+            _log_complete("success")
             yield _sse_line({"event": "done", "thread_id": run_tid})
             return
         except Exception as exc:  # noqa: BLE001
             if emitted or not is_transient_workflow_error(exc):
+                sse_frames += 1
+                _log_complete(
+                    "error",
+                    error_type=type(exc).__name__,
+                    error_message=str(exc)[:2000],
+                )
                 yield _sse_line({"event": "error", "thread_id": run_tid, "detail": str(exc)})
                 return
             attempt += 1
             if attempt >= max_stream_attempts:
-                _log.warning(
-                    "Workflow stream retries exhausted",
-                    extra={
-                        "event": "workflow_stream_giving_up",
-                        "thread_id": run_tid,
-                        "attempt": attempt,
-                        "error_type": type(exc).__name__,
-                        "error_message": str(exc)[:2000],
-                    },
+                sse_frames += 1
+                _log_complete(
+                    "error_retries_exhausted",
+                    error_type=type(exc).__name__,
+                    error_message=str(exc)[:2000],
                 )
                 yield _sse_line({"event": "error", "thread_id": run_tid, "detail": str(exc)})
                 return
@@ -163,6 +192,7 @@ async def aiter_workflow_sse(
     """
     tid = str(body.thread_id) if body.thread_id else str(uuid.uuid4())
     register_workflow_thread(user_id=user.id, thread_id=tid)
+    session_t0 = time.perf_counter()
     _log.info(
         "Workflow SSE stream started",
         extra={"event": "workflow_stream_start", "user_id": str(user.id), "thread_id": tid},
@@ -188,8 +218,20 @@ async def aiter_workflow_sse(
                 raise item
             yield str(item).encode("utf-8")
     finally:
+        wall_ms = round((time.perf_counter() - session_t0) * 1000, 3)
         worker.join(timeout=0.5)
-        if worker.is_alive():
+        worker_alive = worker.is_alive()
+        _log.info(
+            "Workflow SSE HTTP session ended",
+            extra={
+                "event": "workflow_stream_session_end",
+                "user_id": str(user.id),
+                "thread_id": tid,
+                "wall_duration_ms": wall_ms,
+                "producer_thread_still_running": worker_alive,
+            },
+        )
+        if worker_alive:
             _log.warning(
                 "Workflow SSE worker still running after client disconnect or join timeout",
                 extra={
