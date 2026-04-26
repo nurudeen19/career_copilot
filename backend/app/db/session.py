@@ -2,7 +2,9 @@
 
 ARCHITECTURE: Unified database abstraction layer supporting both Postgres and SQLite.
 - Automatically detects database type from URL and configures appropriately
-- Postgres: uses shared psycopg pool for both SQLAlchemy and LangGraph
+- Postgres: **two** ``psycopg_pool.ConnectionPool`` instances (same server, separate caps):
+  one for SQLAlchemy only, one for LangGraph PostgresSaver only. That avoids one subsystem
+  exhausting the shared bucket during long multi-minute agentic runs.
 - SQLite: uses default pooling, local checkpointer
 - No forcing of connection type; app adapts intelligently to the URL
 """
@@ -16,10 +18,28 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.pool import NullPool, StaticPool
 from sqlalchemy.orm import Session, sessionmaker
 
-_pool: Any | None = None
+_pool_sa: Any | None = None
+_pool_checkpoint: Any | None = None
 _engine: Engine | None = None
 _SessionLocal: sessionmaker[Session] | None = None
 _db_type: str | None = None  # 'postgres' or 'sqlite'
+
+# Long agentic workflows: many short checkpoint checkouts + occasional ORM tool sessions.
+# Acquire timeout must cover worst-case queueing; max_idle applies only to connections
+# sitting **in** the pool (not while checked out for an active graph step).
+_POOL_TIMEOUT_S = 180.0
+_POOL_SA_MIN = 1
+_POOL_SA_MAX = 10
+_POOL_CP_MIN = 2
+_POOL_CP_MAX = 12
+_POOL_MAX_IDLE_S = 30 * 60.0
+_POOL_MAX_LIFETIME_S = 2 * 60 * 60.0
+_POOL_RECONNECT_TIMEOUT_S = 10 * 60.0
+
+
+def _pool_check_connection(conn: Any) -> None:
+    """Run before handing a pooled connection to a client (stale TCP / server drops)."""
+    conn.execute("SELECT 1")
 
 
 def _detect_db_type(database_url: str | None) -> str | None:
@@ -65,17 +85,16 @@ def get_db_type() -> str | None:
     return _db_type
 
 
-def configure_pool(database_url: str | None) -> Any:
-    """Initialize connection pool (psycopg for Postgres, None for SQLite).
-    
-    Automatically detects database type from URL and configures appropriately.
+def configure_pool(database_url: str | None) -> tuple[Any | None, Any | None]:
+    """Initialize psycopg pools for Postgres (SQLAlchemy + checkpoint), or None for SQLite.
+
     Call this FIRST during app startup, before configure_engine().
-    
-    Returns the pool (for Postgres) or None (for SQLite).
+
+    Returns ``(sqlalchemy_pool, checkpoint_pool)`` for Postgres, else ``(None, None)``.
     """
-    global _pool, _db_type
-    if _pool is not None:
-        return _pool
+    global _pool_sa, _pool_checkpoint, _db_type
+    if _pool_sa is not None:
+        return _pool_sa, _pool_checkpoint
 
     db_type = _detect_db_type(database_url)
     _db_type = db_type
@@ -83,37 +102,58 @@ def configure_pool(database_url: str | None) -> Any:
     if db_type == "postgres":
         from psycopg_pool import ConnectionPool
 
-        _pool = ConnectionPool(
-            conninfo=_normalize_postgres_conninfo(database_url),
-            open=True,
-            min_size=2,
-            max_size=20,
-            timeout=30,
-            max_idle=300,
+        conninfo = _normalize_postgres_conninfo(database_url)
+        pool_kw: dict[str, Any] = {
+            "conninfo": conninfo,
+            "open": True,
+            "timeout": _POOL_TIMEOUT_S,
+            "max_idle": _POOL_MAX_IDLE_S,
+            "max_lifetime": _POOL_MAX_LIFETIME_S,
+            "reconnect_timeout": _POOL_RECONNECT_TIMEOUT_S,
+            "check": _pool_check_connection,
+        }
+        _pool_sa = ConnectionPool(
+            min_size=_POOL_SA_MIN,
+            max_size=_POOL_SA_MAX,
+            name="sqlalchemy",
+            **pool_kw,
         )
-        return _pool
+        _pool_checkpoint = ConnectionPool(
+            min_size=_POOL_CP_MIN,
+            max_size=_POOL_CP_MAX,
+            name="langgraph_checkpoint",
+            **pool_kw,
+        )
+        return _pool_sa, _pool_checkpoint
 
     # SQLite or no URL: no pool needed
-    return None
+    return None, None
 
 
 def get_pool() -> Any | None:
-    """Return the shared psycopg pool (None if SQLite or not initialized)."""
-    return _pool
+    """Return the LangGraph / checkpoint psycopg pool (None if SQLite or not initialized)."""
+    return _pool_checkpoint
+
+
+def get_sqlalchemy_pool() -> Any | None:
+    """Return the ORM-only psycopg pool (None if SQLite or not initialized)."""
+    return _pool_sa
 
 
 def dispose_pool() -> None:
-    """Close the shared connection pool during app shutdown."""
-    global _pool
-    if _pool is not None:
-        _pool.close()
-        _pool = None
+    """Close psycopg pools during app shutdown."""
+    global _pool_sa, _pool_checkpoint
+    for p in (_pool_sa, _pool_checkpoint):
+        if p is not None:
+            p.close()
+    _pool_sa = None
+    _pool_checkpoint = None
 
 
 def configure_engine(database_url: str | None) -> None:
     """Create SQLAlchemy engine, auto-detecting database type from URL.
     
-    Postgres: Uses shared psycopg pool (must call configure_pool() first).
+    Postgres: Uses the ORM-only psycopg pool (must call configure_pool() first).
     SQLite: Uses StaticPool for local file connections.
     
     Intelligently adapts based on the URL without forcing a single type.
@@ -127,21 +167,22 @@ def configure_engine(database_url: str | None) -> None:
     _db_type = db_type
 
     if db_type == "postgres":
-        # Postgres: use shared pool via creator function
-        if _pool is None:
+        # Postgres: ORM-only psycopg pool via creator (NullPool = no second SA pool layer).
+        if _pool_sa is None:
             msg = "Postgres pool not initialized. Call configure_pool() before configure_engine()."
             raise RuntimeError(msg)
 
         sa_url = normalize_postgres_sqlalchemy_url(database_url)
 
         def get_connection() -> Any:
-            """Creator function: get connection from shared psycopg pool."""
-            return _pool.getconn()
+            """Creator: checkout from the SQLAlchemy-dedicated psycopg pool."""
+            return _pool_sa.getconn()
 
         _engine = create_engine(
             sa_url,
             creator=get_connection,
-            poolclass=NullPool,  # Use psycopg pool, not SQLAlchemy's QueuePool
+            poolclass=NullPool,
+            pool_pre_ping=True,
         )
     else:
         # SQLite (or other): use SQLAlchemy default pooling
@@ -149,6 +190,7 @@ def configure_engine(database_url: str | None) -> None:
             database_url,
             poolclass=StaticPool,
             connect_args={"check_same_thread": False},
+            pool_pre_ping=True,
         )
 
     _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)

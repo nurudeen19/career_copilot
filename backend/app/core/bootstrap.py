@@ -62,13 +62,13 @@ def init_app() -> None:
     configure_logging(settings)
     _log.info("init_app: configuring LangSmith from settings")
     _configure_langsmith()
-    _log.info("init_app: initializing shared connection pool")
+    _log.info("init_app: initializing Postgres connection pools (ORM + checkpoint)")
     configure_pool(settings.database_url)
-    _log.info("init_app: configuring SQLAlchemy engine (using shared pool)")
+    _log.info("init_app: configuring SQLAlchemy engine (ORM pool)")
     configure_engine(settings.database_url)
     _log.info("init_app: loading prompt guard (%s)", settings.prompt_guard.model_id)
     setup_guardrails(settings)
-    _log.info("init_app: LangGraph checkpointer (using shared pool)")
+    _log.info("init_app: LangGraph checkpointer (checkpoint pool)")
     get_checkpointer(settings)
     _log.info("init_app: finished")
 
@@ -89,9 +89,9 @@ def shutdown_app() -> None:
     teardown_guardrails()
     _log.info("shutdown_app: disposing LangGraph checkpointer")
     dispose_checkpointer()
-    _log.info("shutdown_app: disposing database engine (release pool checkouts)")
+    _log.info("shutdown_app: disposing database engine (release ORM pool checkouts)")
     dispose_engine()
-    _log.info("shutdown_app: disposing shared connection pool")
+    _log.info("shutdown_app: disposing Postgres connection pools")
     dispose_pool()
     try:
         from langchain_core.tracers.langchain import wait_for_all_tracers

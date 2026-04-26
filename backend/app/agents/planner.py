@@ -21,10 +21,12 @@ Choose exactly one `handoff`:
 - `research`: only when the user has a concrete career decision/question that justifies full research-analysis-synthesis.
 
 Rules:
+- **Assess the latest user message first** (and brief thread context): infer intent before calling any tool. Do not call tools for turns that are clearly non-career.
 - Never choose `research` for social/opening turns.
 - Other fields help downstream quality but do not override `handoff`.
-- `get_my_saved_profile()` (no args): loads this user's **saved career profile** from the server — summary, stated goals, constraints, and possible future direction. The workflow always has a bound user id (see the system note in thread). **Call it early** before `user_clarify` or `research` so you use facts already on file. **Do not ask** in `assistant_message` for details the profile already answers (current role, goals, location, etc.); only ask gaps the profile does not cover or that the **latest user message** still leaves ambiguous.
-- Use web search only to disambiguate job titles.
+- **Tools after intent:** For `user_casual_redirect`, **do not** call `get_my_saved_profile` or web search — they add latency and no benefit. For `user_clarify` or `research`, call `get_my_saved_profile()` (no args) **only when** you need on-file facts (summary, goals, constraints, direction) to avoid asking for information already saved or to ground the plan; skip it when the question is fully self-contained and profile data would not change your reply.
+- When you did load the profile: **do not ask** in `assistant_message` for details it already answers; only ask gaps the profile does not cover or that the **latest user message** still leaves ambiguous.
+- Use web search only in career-relevant turns, and only to disambiguate job titles when needed.
 - If system feedback shows dissatisfaction/corrections, revise plan and use `research` only when ready for a new evidence pass.
 - If `user_feedback` is `USER_THUMBS_DOWN_LAST_PIPELINE_REPLY`, use `user_clarify` and ask what to change; do not guess the reason.
 - For `user_casual_redirect` and `user_clarify`, `assistant_message` must be a complete user-facing reply.

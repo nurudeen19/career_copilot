@@ -63,8 +63,8 @@ def _user_id_prefix(state: CareerGraphState) -> list[AnyMessage]:
     return [
         SystemMessage(
             content=(
-                "User id for this workflow session (for your context only; "
-                "get_my_saved_profile uses it server-side — call that tool with no arguments to load their saved profile)."
+                "User id for this workflow session (for your context only). "
+                "If you call get_my_saved_profile with no arguments, the server uses this id to load their saved profile."
             )
         )
     ]
