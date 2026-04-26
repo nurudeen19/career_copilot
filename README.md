@@ -1,13 +1,3 @@
----
-title: Career Copilot
-emoji: 📚
-colorFrom: blue
-colorTo: gray
-sdk: docker
-pinned: false
-short_description: AI-powered Career Decision Support
----
-
 # Career Copilot
 
 An **AI-powered career advisor** that provides research-backed guidance through a multi-agent workflow. Ask career questions, and get personalized advice by combining planning, research, analysis, critique, and synthesis stages.
