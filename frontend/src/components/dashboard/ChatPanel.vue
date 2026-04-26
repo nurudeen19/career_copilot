@@ -50,6 +50,10 @@ const error = ref<string | null>(null)
 /** Assistant message we tried to send thumbs-down feedback for; allows one-click retry after failure. */
 const thumbDownRetryFor = ref<ChatMessage | null>(null)
 
+/** In-progress reply text while SSE steps arrive (cleared when the turn finishes). */
+const liveStreamDraft = ref('')
+let liveDraftScrollTimer: ReturnType<typeof setTimeout> | null = null
+
 /** While waiting for SSE: dots only → rotating lines → live step labels from the graph. */
 const STREAM_INTRO_MS = 2800
 const STREAM_ROTATE_MS = 2600
@@ -99,6 +103,7 @@ function resetStreamUi() {
   streamPhase.value = 'intro'
   streamRotateIndex.value = 0
   streamLiveCaption.value = ''
+  liveStreamDraft.value = ''
 }
 
 function beginStreamWaitUi() {
@@ -128,6 +133,16 @@ const CHAT_STATE_KEY = 'career_copilot_chat_state_v1'
 
 type StoredChat = { v?: number; thread_id?: string | null; messages?: unknown[] }
 
+function _patchStr(patch: unknown, path: (string | number)[]): string | null {
+  let cur: unknown = patch
+  for (const key of path) {
+    if (cur === null || cur === undefined) return null
+    if (typeof cur !== 'object') return null
+    cur = (cur as Record<string, unknown>)[String(key)]
+  }
+  return typeof cur === 'string' && cur.trim() ? cur.trim() : null
+}
+
 function foldAssistantDraftFromStep(step: string, patch: unknown, acc: { text: string }) {
   if (step === 'input_validation') {
     const v = extractValidationError(patch)
@@ -138,9 +153,26 @@ function foldAssistantDraftFromStep(step: string, patch: unknown, acc: { text: s
   } else if (step === 'user_handoff') {
     const h = extractAssistantTextFromPatch(patch)
     if (h) acc.text = h
+  } else if (step === 'planner') {
+    const am = _patchStr(patch, ['plan', 'assistant_message'])
+    if (am) acc.text = am
+  } else if (step === 'research') {
+    const rep = _patchStr(patch, ['research', 'research_report'])
+    if (rep) acc.text = rep
+  } else if (step === 'analyst') {
+    const ar = _patchStr(patch, ['analysis', 'analysis_report'])
+    if (ar) acc.text = ar
+  } else if (step === 'critic') {
+    const cr = _patchStr(patch, ['critique', 'critique_report'])
+    if (cr) acc.text = cr
   } else if (step === 'synthesizer') {
     const t = extractAssistantTextFromPatch(patch)
-    if (t) acc.text = t
+    if (t) {
+      acc.text = t
+      return
+    }
+    const rec = _patchStr(patch, ['synthesis', 'recommendation'])
+    if (rec) acc.text = rec
   }
 }
 
@@ -254,6 +286,14 @@ async function scrollToLatest() {
   el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
 }
 
+function scheduleScrollForLiveDraft() {
+  if (liveDraftScrollTimer !== null) clearTimeout(liveDraftScrollTimer)
+  liveDraftScrollTimer = setTimeout(() => {
+    liveDraftScrollTimer = null
+    void scrollToLatest()
+  }, 120)
+}
+
 function focusComposer() {
   void nextTick(() => {
     const el = composerRef.value
@@ -283,6 +323,10 @@ watch(threadId, persistState)
 
 onUnmounted(() => {
   clearStreamWaitTimers()
+  if (liveDraftScrollTimer !== null) {
+    clearTimeout(liveDraftScrollTimer)
+    liveDraftScrollTimer = null
+  }
 })
 
 loadPersistedState()
@@ -295,6 +339,8 @@ type WorkflowTurnResult =
 async function runWorkflowTurn(params: {
   message: string
   user_feedback?: string | null
+  /** Called after each graph step so the UI can show in-progress text (SSE is incremental). */
+  onDraftUpdate?: (text: string) => void
 }): Promise<WorkflowTurnResult> {
   const draft = { text: '' }
   let sawChunk = false
@@ -311,6 +357,7 @@ async function runWorkflowTurn(params: {
         onStreamGraphStep(ev.step)
         if (RESEARCH_PIPELINE_STEPS.has(ev.step)) researchBacked = true
         foldAssistantDraftFromStep(ev.step, ev.patch, draft)
+        params.onDraftUpdate?.(draft.text)
       } else if (ev.kind === 'done') {
         if (ev.thread_id) {
           threadId.value = ev.thread_id
@@ -360,11 +407,16 @@ async function onThumbDown(m: ChatMessage) {
   const result = await runWorkflowTurn({
     message: '',
     user_feedback: thumbsDownPlannerFeedback(),
+    onDraftUpdate: (t) => {
+      liveStreamDraft.value = t
+      scheduleScrollForLiveDraft()
+    },
   })
 
   clearStreamWaitTimers()
   resetStreamUi()
   streaming.value = false
+  liveStreamDraft.value = ''
 
   if (result.ok) {
     thumbDownRetryFor.value = null
@@ -414,11 +466,18 @@ async function send() {
   beginStreamWaitUi()
   await scrollToLatest()
 
-  const result = await runWorkflowTurn({ message: text })
+  const result = await runWorkflowTurn({
+    message: text,
+    onDraftUpdate: (t) => {
+      liveStreamDraft.value = t
+      scheduleScrollForLiveDraft()
+    },
+  })
 
   clearStreamWaitTimers()
   resetStreamUi()
   streaming.value = false
+  liveStreamDraft.value = ''
 
   if (result.ok) {
     if (result.assistantText.trim()) {
@@ -538,6 +597,15 @@ function onKeydown(e: KeyboardEvent) {
               <p v-else-if="streamPhase === 'live' && streamLiveCaption" class="stream-caption" aria-live="polite">
                 {{ streamLiveCaption }}
               </p>
+              <div
+                v-if="liveStreamDraft.trim()"
+                class="stream-live-md md-content"
+                aria-live="polite"
+                aria-label="Response in progress"
+              >
+                <!-- eslint-disable-next-line vue/no-v-html -- same pipeline as assistant bubbles -->
+                <div v-html="renderSafeMarkdown(liveStreamDraft)" />
+              </div>
             </div>
           </div>
         </div>
@@ -902,6 +970,18 @@ function onKeydown(e: KeyboardEvent) {
   font-weight: 500;
   color: var(--color-ink-muted);
   animation: captionIn 0.35s ease;
+}
+
+.stream-live-md {
+  width: 100%;
+  margin-top: 0.25rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border);
+  max-height: min(45vh, 28rem);
+  overflow-y: auto;
+  text-align: left;
+  font-size: 0.9rem;
+  line-height: 1.45;
 }
 
 @keyframes captionIn {
